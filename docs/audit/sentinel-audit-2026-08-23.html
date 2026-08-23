@@ -1,0 +1,742 @@
+<title>Sentinel Audit Dossier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Sans+3:ital,wght@0,300..700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --paper:#F2F4F7;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECF1;
+  --ink:#151A22;
+  --ink-soft:#596373;
+  --ink-faint:#8A94A3;
+  --rule:#D8DDE5;
+  --rule-strong:#BCC4D0;
+  --accent:#9A6410;
+  --accent-soft:#F2E4CC;
+  --crit:#B32D22;
+  --high:#B4601A;
+  --med:#8A7011;
+  --low:#3E6E52;
+  --ok:#2A6B52;
+  --shadow:0 1px 2px rgba(20,26,35,.06),0 8px 24px -16px rgba(20,26,35,.28);
+  --maxw:74ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1117;
+    --surface:#161B23;
+    --surface-2:#1D232D;
+    --ink:#E7EAF0;
+    --ink-soft:#9CA6B4;
+    --ink-faint:#6E7887;
+    --rule:#262D38;
+    --rule-strong:#38404E;
+    --accent:#E0A340;
+    --accent-soft:#332814;
+    --crit:#E86759;
+    --high:#E09A4E;
+    --med:#CFB447;
+    --low:#6FB08A;
+    --ok:#5FAE8A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1117;
+  --surface:#161B23;
+  --surface-2:#1D232D;
+  --ink:#E7EAF0;
+  --ink-soft:#9CA6B4;
+  --ink-faint:#6E7887;
+  --rule:#262D38;
+  --rule-strong:#38404E;
+  --accent:#E0A340;
+  --accent-soft:#332814;
+  --crit:#E86759;
+  --high:#E09A4E;
+  --med:#CFB447;
+  --low:#6FB08A;
+  --ok:#5FAE8A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Source Sans 3",ui-sans-serif,system-ui,sans-serif;
+  font-size:17px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px 120px}
+p,li{max-width:var(--maxw)}
+
+/* ── masthead ─────────────────────────────────────── */
+.masthead{
+  padding:72px 0 40px;
+  border-bottom:2px solid var(--ink);
+  display:flex;flex-direction:column;gap:20px;
+}
+.eyebrow{
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);
+}
+h1{
+  font-family:"Instrument Serif",Georgia,serif;
+  font-weight:400;font-size:clamp(2.9rem,7vw,4.6rem);
+  line-height:1.02;letter-spacing:-.015em;margin:0;text-wrap:balance;
+}
+h1 em{font-style:italic;color:var(--accent)}
+.dek{font-size:1.18rem;color:var(--ink-soft);max-width:62ch;margin:0}
+.meta-row{
+  display:flex;flex-wrap:wrap;gap:8px 28px;
+  font-family:"JetBrains Mono",monospace;font-size:11.5px;
+  color:var(--ink-faint);letter-spacing:.03em;padding-top:6px;
+}
+.meta-row b{color:var(--ink-soft);font-weight:500}
+
+/* ── verdict band ─────────────────────────────────── */
+.verdict{
+  margin:0 0 8px;padding:28px 30px;
+  background:var(--surface);border:1px solid var(--rule);
+  border-left:3px solid var(--accent);
+  border-radius:3px;box-shadow:var(--shadow);
+  display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:center;
+}
+@media(max-width:660px){.verdict{grid-template-columns:1fr;gap:18px}}
+.score-block{text-align:center;min-width:150px}
+.score-now{
+  font-family:"Instrument Serif",Georgia,serif;
+  font-size:4.6rem;line-height:.9;color:var(--ink);
+  font-variant-numeric:tabular-nums;
+}
+.score-now span{font-size:1.5rem;color:var(--ink-faint)}
+.score-cap{
+  font-family:"JetBrains Mono",monospace;font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  margin-top:8px;
+}
+.verdict p{margin:0;max-width:56ch}
+.verdict p + p{margin-top:12px}
+
+/* ── contents ─────────────────────────────────────── */
+.toc{
+  margin:44px 0 0;padding:24px 0 0;border-top:1px solid var(--rule);
+}
+.toc ol{
+  list-style:none;margin:0;padding:0;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:2px 26px;
+  counter-reset:toc;
+}
+.toc li{max-width:none;counter-increment:toc}
+.toc a{
+  display:flex;gap:11px;padding:6px 0;
+  color:var(--ink-soft);text-decoration:none;font-size:14.5px;
+  border-bottom:1px solid transparent;
+}
+.toc a::before{
+  content:counter(toc,decimal-leading-zero);
+  font-family:"JetBrains Mono",monospace;font-size:10.5px;
+  color:var(--accent);padding-top:4px;flex:none;
+}
+.toc a:hover,.toc a:focus-visible{color:var(--ink);border-bottom-color:var(--rule-strong)}
+
+/* ── sections ─────────────────────────────────────── */
+section{padding-top:64px}
+h2{
+  font-family:"Instrument Serif",Georgia,serif;font-weight:400;
+  font-size:clamp(1.9rem,3.6vw,2.6rem);line-height:1.1;letter-spacing:-.01em;
+  margin:0 0 6px;text-wrap:balance;
+}
+.h2-num{
+  font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:500;
+  letter-spacing:.15em;color:var(--accent);display:block;margin-bottom:12px;
+}
+h3{
+  font-family:"Source Sans 3",sans-serif;font-weight:600;
+  font-size:1.06rem;letter-spacing:.005em;margin:34px 0 10px;color:var(--ink);
+}
+h4{
+  font-family:"JetBrains Mono",monospace;font-weight:500;font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  margin:26px 0 10px;
+}
+.lede{font-size:1.06rem;color:var(--ink-soft);margin:0 0 4px}
+a{color:var(--accent)}
+code{
+  font-family:"JetBrains Mono",monospace;font-size:.85em;
+  background:var(--surface-2);padding:1.5px 5px;border-radius:3px;
+  color:var(--ink);word-break:break-word;
+}
+strong{font-weight:600}
+
+/* ── tables ───────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;margin:18px 0 6px;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:600px}
+th{
+  text-align:left;padding:11px 15px;
+  font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:500;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);
+  border-bottom:1px solid var(--rule-strong);white-space:nowrap;
+  background:var(--surface-2);
+}
+td{padding:11px 15px;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-soft)}
+td:first-child{color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:none}
+.num{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* meter */
+.meter{display:flex;align-items:center;gap:10px;min-width:150px}
+.meter-track{flex:1;height:5px;background:var(--surface-2);border-radius:3px;overflow:hidden;min-width:60px}
+.meter-fill{height:100%;background:var(--accent);border-radius:3px}
+.meter-val{font-family:"JetBrains Mono",monospace;font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink);min-width:46px;text-align:right}
+
+/* ── severity chips ───────────────────────────────── */
+.chip{
+  display:inline-block;font-family:"JetBrains Mono",monospace;
+  font-size:9.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  padding:2.5px 7px;border-radius:2px;border:1px solid currentColor;white-space:nowrap;
+}
+.c-crit{color:var(--crit)} .c-high{color:var(--high)}
+.c-med{color:var(--med)}  .c-low{color:var(--low)}
+.c-ok{color:var(--ok)}
+
+/* ── finding cards ────────────────────────────────── */
+.findings{display:flex;flex-direction:column;gap:2px;margin:20px 0}
+.finding{
+  background:var(--surface);border:1px solid var(--rule);
+  border-left:3px solid var(--rule-strong);
+  padding:16px 20px;border-radius:2px;
+}
+.finding.sev-crit{border-left-color:var(--crit)}
+.finding.sev-high{border-left-color:var(--high)}
+.finding.sev-med{border-left-color:var(--med)}
+.finding-head{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:7px}
+.finding-id{
+  font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink-faint);
+  letter-spacing:.08em;flex:none;
+}
+.finding-title{font-weight:600;font-size:1.02rem;color:var(--ink);flex:1;min-width:200px}
+.finding p{margin:0 0 8px;font-size:14.8px;color:var(--ink-soft);max-width:70ch}
+.finding p:last-child{margin-bottom:0}
+.finding dl{
+  margin:10px 0 0;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;
+  font-size:13.5px;max-width:70ch;
+}
+.finding dt{
+  font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-faint);padding-top:4px;
+}
+.finding dd{margin:0;color:var(--ink-soft)}
+
+/* ── pipeline diagram ─────────────────────────────── */
+.pipe{
+  display:flex;flex-wrap:wrap;align-items:stretch;gap:0;
+  margin:22px 0;border:1px solid var(--rule);border-radius:3px;
+  background:var(--surface);overflow:hidden;
+}
+.pipe-stage{
+  flex:1 1 128px;padding:14px 15px;border-right:1px solid var(--rule);
+  display:flex;flex-direction:column;gap:5px;min-width:128px;
+}
+.pipe-stage:last-child{border-right:none}
+.pipe-stage b{
+  font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--accent);font-weight:500;
+}
+.pipe-stage span{font-size:13px;color:var(--ink-soft);line-height:1.45}
+.pipe-stage.gap{background:var(--accent-soft)}
+.pipe-stage.gap b{color:var(--crit)}
+
+/* ── status ledger ────────────────────────────────── */
+.ledger{
+  border:1px solid var(--rule);border-radius:3px;background:var(--surface);
+  overflow:hidden;margin:20px 0;
+}
+.ledger-row{
+  display:grid;grid-template-columns:132px 1fr;gap:20px;
+  padding:14px 20px;border-bottom:1px solid var(--rule);
+}
+.ledger-row:last-child{border-bottom:none}
+@media(max-width:600px){.ledger-row{grid-template-columns:1fr;gap:6px}}
+.ledger-key{
+  font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;padding-top:4px;
+}
+.ledger-val{font-size:14.5px;color:var(--ink-soft);max-width:66ch}
+.ledger-val code{font-size:.86em}
+
+/* ── callout ──────────────────────────────────────── */
+.callout{
+  border:1px solid var(--rule);border-left:3px solid var(--crit);
+  background:var(--surface);padding:18px 22px;border-radius:2px;margin:22px 0;
+}
+.callout h4{margin-top:0;color:var(--crit)}
+.callout p{margin:0;font-size:14.8px;color:var(--ink-soft)}
+.callout p+p{margin-top:9px}
+
+ul.tight{padding-left:19px;margin:10px 0}
+ul.tight li{margin-bottom:6px;font-size:15px;color:var(--ink-soft)}
+ul.tight li strong{color:var(--ink)}
+
+hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
+.colophon{
+  padding-top:18px;font-family:"JetBrains Mono",monospace;font-size:11px;
+  color:var(--ink-faint);line-height:1.8;letter-spacing:.02em;
+}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Product · Security · Architecture Audit</div>
+  <h1>WeCrew Sentinel:<br>what's <em>built</em>, what's <em>claimed</em></h1>
+  <p class="dek">A discovery-first audit of the Sentinel platform against its own positioning as an AI-native, evidence-backed API security product — read from the source tree and the running cluster, not the roadmap.</p>
+  <div class="meta-row">
+    <span><b>Date</b> 2026-08-23</span>
+    <span><b>Target</b> sentinel.wecrew.in</span>
+    <span><b>Method</b> static read + live probe</span>
+    <span><b>Scope</b> 68k LOC backend · 28k LOC frontend · 5 live pods</span>
+  </div>
+</header>
+
+<div class="verdict" style="margin-top:44px">
+  <div class="score-block">
+    <div class="score-now">52<span>/100</span></div>
+    <div class="score-cap">Current · target 82</div>
+  </div>
+  <div>
+    <p><strong>Sentinel is a real platform, not a dashboard shell.</strong> The eBPF TLS-capture sensor, the four-agent detection pipeline, and the versioned risk model are genuine engineering with 1,108 backend tests behind them. That is a stronger foundation than the positioning problem suggests.</p>
+    <p><strong>Two things block the story it tells.</strong> The Evidence Engine — the product's stated moat — is one list endpoint over two tables. And there is no AI investigation layer at all, which makes "AI-Native" the single least defensible claim on the page.</p>
+  </div>
+</div>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#arch">Current architecture</a></li>
+    <li><a href="#map">Product map</a></li>
+    <li><a href="#journeys">User journeys</a></li>
+    <li><a href="#sec">Security model</a></li>
+    <li><a href="#data">Data model</a></li>
+    <li><a href="#infra">Infrastructure</a></li>
+    <li><a href="#score">Product score</a></li>
+    <li><a href="#gaps">Top 10 gaps</a></li>
+    <li><a href="#opps">Top 10 opportunities</a></li>
+    <li><a href="#comp">Competitive position</a></li>
+    <li><a href="#roadmap">P0 / P1 / P2 roadmap</a></li>
+    <li><a href="#target">Target architecture</a></li>
+    <li><a href="#status">Implementation status</a></li>
+  </ol>
+</nav>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="arch">
+  <span class="h2-num">01</span>
+  <h2>Current architecture</h2>
+  <p class="lede">FastAPI monolith, React SPA, eBPF sensor, single Postgres. Deliberate and coherent — not accidental.</p>
+
+  <p>The request path is a single aggregate router mounted at <code>/api</code>, fronted by an <code>AdaptiveRequestGuard</code> middleware. Fifty-five feature routers cover 55 surfaces; behaviour lives in 44 modules under <code>server/modules/</code>, which is the right separation and is mostly honoured.</p>
+
+  <p>Two routes sit deliberately outside <code>/api</code>: <code>POST /v1/events</code> and a legacy <code>POST /</code>, both authenticated with a sensor API key rather than a user JWT. That is the eBPF ingest path, and it is the most differentiated part of the system.</p>
+
+  <h3>The detection pipeline is real</h3>
+  <p>This is not rule-matching dressed up as a pipeline. Four named agents run in sequence over eleven detectors (BOLA, BFLA, injection, exfiltration, burst, bot, auth-anomaly, behavioural-baseline, resource-abuse, schema, plus common), and the unified pipeline is running in <code>active</code> mode in production — it owns alerts and evidence, not just observation.</p>
+
+  <div class="pipe">
+    <div class="pipe-stage"><b>Source</b><span>eBPF sensor, logs, OpenAPI, recon</span></div>
+    <div class="pipe-stage"><b>Normalize</b><span>NormalizationAgent → envelope</span></div>
+    <div class="pipe-stage"><b>Detect</b><span>RuleDetectionAgent → 11 detectors</span></div>
+    <div class="pipe-stage"><b>Correlate</b><span>CorrelationAgent → incident</span></div>
+    <div class="pipe-stage"><b>Enforce</b><span>EnforcementAgent → block / rate-limit</span></div>
+    <div class="pipe-stage gap"><b>Investigate</b><span>Not built — no AI layer exists</span></div>
+  </div>
+
+  <h3>The sensor is the hard part, and it works</h3>
+  <p>A C BPF program with OpenSSL and Go TLS uprobes, shipped by a Rust/Tokio userspace agent that parses HTTP/1.1 and HTTP/2, redacts PII, and gzip-batches to <code>/v1/events</code>. It captures decrypted TLS traffic at the kernel boundary with no proxy, no sidecar, and no certificate games. Most competitors need a mirror, a gateway plugin, or an inline proxy to get the same data.</p>
+  <p>Ingest correctly preserves request/response bodies and JWT identity through normalization, drops the console's own self-traffic, and coerces sensor clock skew. Those are the details that separate a demo from a product.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="map">
+  <span class="h2-num">02</span>
+  <h2>Product map</h2>
+  <p class="lede">Three workspaces, roughly forty pages, two visual systems mid-migration.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Workspace</th><th>Route</th><th>Surface area</th><th>Maturity</th></tr></thead>
+    <tbody>
+      <tr><td>Customer</td><td><code>/app</code></td><td>Organization, Dashboard, Discovery (8 views), Testing (5), Protection (6), Live Feed, Alerts, Reports, Threat Intel, Agentic, MCP Shield</td><td>Broad, uneven depth</td></tr>
+      <tr><td>Org admin</td><td><code>/admin</code></td><td>Settings, Users, Audit Logs, API Keys, License, Attribute Mapping, System Health (3), Operations</td><td>Functional</td></tr>
+      <tr><td>Platform</td><td><code>/platform</code></td><td>Overview, Tenant Directory, Infrastructure Status</td><td>Thin</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Data flow is disciplined: <strong>pages → hooks → services → api-client</strong>, with no <code>fetch</code> in pages and no <code>localStorage</code> — the httpOnly cookie is the real session. Realtime invalidation replaces polling entirely (<code>refetchInterval: false</code>), which is the correct choice and rare to see done properly.</p>
+
+  <p>The cost: a cross-file invariant between <code>src/lib/realtime.ts</code> and <code>server/api/websocket/event_types.py</code> that nothing enforces at build time. A new WS event type that misses the union silently stops refreshing a view. That is a latent-bug generator, not a bug yet.</p>
+
+  <h3>Two design languages</h3>
+  <p>A legacy <code>GlassCard</code> layer and a newer Evidence system (<code>Evidence*.tsx</code>, scoped under <code>.evd-root</code>). The Organization page is already fully migrated to Evidence and reads well. The migration is real but unfinished, and unfinished migrations are how a third language gets born.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="journeys">
+  <span class="h2-num">03</span>
+  <h2>Current user journeys</h2>
+  <p class="lede">The discover → inventory → detect arc works. The prove → investigate → remediate → verify arc does not close.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Journey</th><th>State</th><th>Where it breaks</th></tr></thead>
+    <tbody>
+      <tr><td>Traffic → inventory</td><td><span class="chip c-ok">Works</span></td><td>Sensor upserts endpoints live; verified running in cluster</td></tr>
+      <tr><td>Inventory → risk</td><td><span class="chip c-ok">Works</span></td><td>Versioned model, explained on the surface</td></tr>
+      <tr><td>Detect → alert</td><td><span class="chip c-ok">Works</span></td><td>Pipeline <code>active</code>; auto-block thresholds set to observe-only</td></tr>
+      <tr><td>Alert → evidence</td><td><span class="chip c-med">Partial</span></td><td>Records exist and are redacted, but there is one list endpoint and no per-finding evidence chain</td></tr>
+      <tr><td>Evidence → investigation</td><td><span class="chip c-crit">Missing</span></td><td>No AI layer, no root-cause, no impact analysis</td></tr>
+      <tr><td>Finding → remediation</td><td><span class="chip c-med">Partial</span></td><td>Remediation markdown exists in the tests library; no ticket or PR workflow</td></tr>
+      <tr><td>Remediation → verification</td><td><span class="chip c-crit">Missing</span></td><td>Continuous testing is <em>disabled in production</em> — nothing re-tests a fix</td></tr>
+      <tr><td>Signup → first insight</td><td><span class="chip c-crit">Blocked</span></td><td><code>SIGNUP_ENABLED=false</code>; no guided onboarding path to value</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The last two rows are the commercial problem. Sentinel's promise ends with <em>"verify the fix"</em>, and the verification loop is switched off in the only running deployment. A prospect cannot self-serve to a first finding, and a customer cannot be shown proof that a fix landed.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="sec">
+  <span class="h2-num">04</span>
+  <h2>Security model</h2>
+  <p class="lede">Well-constructed, consistently applied, with one hole that was live in production.</p>
+
+  <p>Six roles over 31 granular permissions. <code>RBAC.require_auth</code> accepts a bearer header or the <code>access_token</code> cookie and sets tenant context for optional Postgres RLS. Every multi-tenant table carries <code>account_id</code>, and a dedicated <code>tests/security/</code> suite exists specifically to catch omissions.</p>
+
+  <p>One subtlety worth keeping in mind: <code>require_role</code> grants ADMIN an unconditional bypass, while <code>require_permission</code> does not — ADMIN passes there only because its permission set is exhaustive. Prefer <code>require_permission</code> for new endpoints.</p>
+
+  <div class="callout">
+    <h4>Verified live · now fixed</h4>
+    <p>Every route under <code>/api/anomalies</code> — seven of them — required <strong>no authentication and applied no tenant filter</strong>. An anonymous <code>GET https://sentinel.wecrew.in/api/anomalies/</code> returned HTTP 200 with real production request logs: source IPs, endpoint IDs, paths, response codes, timestamps.</p>
+    <p>The write routes were worse than a read leak. <code>POST /anomalies/log</code> accepted anonymous telemetry injection into any account. <code>POST /anomalies/train</code> retrained the shared Isolation Forest, and <code>POST /anomalies/tune</code> retuned global detector sensitivity — both mutate <strong>process-global state</strong>, so one anonymous caller could blunt anomaly detection for every tenant on the worker.</p>
+    <p>Fixed and committed on branch <code>worktree-sentinel-audit-p0</code>, with 12 new security tests that fail before the change and pass after. <strong>Not yet deployed</strong> — see §13.</p>
+  </div>
+
+  <h3>What the audit cleared</h3>
+  <p>Every other unauthenticated route is unauthenticated by design and carries its own inline auth: sensor heartbeat and ingest resolve a sensor key, the GitHub and Stripe webhooks verify signatures, and login / signup / OAuth callback are necessarily public. I checked all of them individually rather than trusting the pattern.</p>
+
+  <h4>Gaps that remain</h4>
+  <ul class="tight">
+    <li><strong>SSO is GitHub only.</strong> The provider field advertises <code>github | google | okta | saml</code>, but only GitHub has an implementation. No SAML, no generic OIDC, no SCIM, no MFA. This is an enterprise-deal blocker, not a nice-to-have.</li>
+    <li><strong>Postgres RLS is available but off</strong> (<code>TENANT_RLS_ENABLED=false</code>). Tenant isolation rests entirely on every query remembering its filter — which the anomalies hole demonstrates is a real failure mode. RLS is the backstop for exactly this.</li>
+    <li><strong>No AI threat model</strong>, because there is no AI surface yet. When one is added, prompt injection via poisoned telemetry becomes a first-class concern — attacker-controlled request bodies would flow into an investigator's context.</li>
+  </ul>
+
+  <p>Production hardening elsewhere is genuinely good: <code>DEBUG=false</code>, signup forced off, demo bootstrap off, pentest target guard enforced with a real allowlist, private targets denied, DNS failures fail closed, and startup refuses to boot on default secrets.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="data">
+  <span class="h2-num">05</span>
+  <h2>Data model</h2>
+  <p class="lede">71 tables in one 1,200-line file. Comprehensive, tenant-keyed, and carrying an unbounded-growth risk.</p>
+
+  <p>Essentially the whole ORM lives in <code>server/models/core.py</code>. That is unusual but not wrong at this size — it keeps the tenancy invariant visible in one place, which is worth more than file tidiness. Every multi-tenant table carries an indexed <code>account_id</code>.</p>
+
+  <p>Coverage is broad: inventory and revisions, vulnerabilities and test runs, request logs and WAF events, evidence records and packages, threat actors and baselines, agent identities and MCP invocations, ML models and evaluations, billing plans and subscriptions, hourly and daily rollups.</p>
+
+  <div class="callout" style="border-left-color:var(--high)">
+    <h4 style="color:var(--high)">Telemetry growth is unmanaged in production</h4>
+    <p>A <code>TenantRetentionPolicy</code> table exists and rollup tables are modelled — but the <strong>archiver and warm exporter are both disabled</strong> in the running deployment, alongside the analytics processor. Raw <code>request_logs</code> accumulate in a single-replica Postgres on a node-local <code>local-path</code> PVC with no partitioning strategy.</p>
+    <p>This is the classic API-security-product failure: the thing that makes the product valuable (keeping traffic) is the thing that kills its margin and its database. It needs a deliberate hot/warm/cold policy before customer volume, not after.</p>
+  </div>
+
+  <p>One migration detail worth preserving: <code>migrations/env.py</code> stamps <code>alembic_version.version_num</code> as <code>String(128)</code> on greenfield, because this project's revision IDs exceed the default 32 characters. Anyone touching <code>env.py</code> needs to keep that width.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="infra">
+  <span class="h2-num">06</span>
+  <h2>Infrastructure</h2>
+  <p class="lede">A correct single-node deployment with no high-availability story.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Concern</th><th>State</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Pods running</td><td><span class="chip c-ok">Healthy</span></td><td>backend, frontend, postgres, redis, sensor DaemonSet — all Ready</td></tr>
+      <tr><td>Image pinning</td><td><span class="chip c-ok">Good</span></td><td>Date-tagged, not <code>:latest</code></td></tr>
+      <tr><td>TLS</td><td><span class="chip c-ok">Good</span></td><td>Let's Encrypt prod via DNS-01, nginx ingress terminates</td></tr>
+      <tr><td>Probes / limits / non-root</td><td><span class="chip c-ok">Good</span></td><td>Liveness, readiness, resources and limits set across manifests</td></tr>
+      <tr><td>Replicas</td><td><span class="chip c-high">Single</span></td><td>Every component is <code>replicas: 1</code> — any restart is downtime</td></tr>
+      <tr><td>PodDisruptionBudget</td><td><span class="chip c-high">None</span></td><td>Zero manifests define one</td></tr>
+      <tr><td>NetworkPolicy</td><td><span class="chip c-high">None</span></td><td>No east-west restriction in the namespace</td></tr>
+      <tr><td>Autoscaling</td><td><span class="chip c-med">None</span></td><td>No HPA; stream engine is <code>IN_PROCESS</code></td></tr>
+      <tr><td>Backup / DR</td><td><span class="chip c-crit">Undefined</span></td><td>No RPO, RTO, or restore-test evidence found</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Single-replica is a deliberate constraint of the <code>local-path</code> ReadWriteOnce storage class, not carelessness — the cluster docs say so explicitly. But it means the current deployment is a working demonstration environment, not a production SaaS topology, and it should be described that way to prospects.</p>
+
+  <p>The sensor DaemonSet runs <code>privileged</code> with <code>hostPID</code>, <code>hostNetwork</code>, <code>SYS_ADMIN</code> and <code>BPF</code>. That is genuinely required for eBPF uprobe attachment — but it is the single most invasive thing Sentinel asks a customer to install, and enterprise security review will interrogate it. It needs a written justification document ready before the first serious deal, not during it.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="score">
+  <span class="h2-num">07</span>
+  <h2>Product score</h2>
+  <p class="lede">52 / 100 today. 82 is realistically reachable in four quarters.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Category</th><th class="num">Weight</th><th>Score</th><th>Basis</th></tr></thead>
+    <tbody>
+      <tr><td>Product value</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:60%"></div></div><span class="meter-val">6.0</span></div></td><td>Real platform, unproven with customers</td></tr>
+      <tr><td>UX</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:55%"></div></div><span class="meter-val">5.5</span></div></td><td>Evidence system good; nav deep, no onboarding</td></tr>
+      <tr><td>API discovery</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:70%"></div></div><span class="meter-val">7.0</span></div></td><td>eBPF is a genuine edge; no native k8s/gateway/git source</td></tr>
+      <tr><td>API security</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:65%"></div></div><span class="meter-val">6.5</span></div></td><td>Strong RBAC and hardening, minus a live authz hole</td></tr>
+      <tr><td>Detection quality</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:65%"></div></div><span class="meter-val">6.5</span></div></td><td>11 detectors, formal pipeline; no FP feedback loop</td></tr>
+      <tr><td>Evidence Engine</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:40%"></div></div><span class="meter-val">4.0</span></div></td><td>Tables and redaction exist; one endpoint, no graph</td></tr>
+      <tr><td>AI quality</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:20%"></div></div><span class="meter-val">2.0</span></div></td><td>No investigation layer; positioning unsupported</td></tr>
+      <tr><td>Observability</td><td class="num">5</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:50%"></div></div><span class="meter-val">2.5</span></div></td><td>Health endpoints only; analytics processor off</td></tr>
+      <tr><td>Enterprise security</td><td class="num">10</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:50%"></div></div><span class="meter-val">5.0</span></div></td><td>Solid core; no SAML/OIDC/MFA/SCIM</td></tr>
+      <tr><td>Scalability</td><td class="num">5</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:40%"></div></div><span class="meter-val">2.0</span></div></td><td>Single replica, in-process stream, unbounded retention</td></tr>
+      <tr><td>SaaS economics</td><td class="num">5</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:40%"></div></div><span class="meter-val">2.0</span></div></td><td>Billing modelled; no cost telemetry or metering</td></tr>
+      <tr><td>Differentiation</td><td class="num">5</td><td><div class="meter"><div class="meter-track"><div class="meter-fill" style="width:50%"></div></div><span class="meter-val">2.5</span></div></td><td>eBPF is real; evidence and AI story unbuilt</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The score is held down by three categories — Evidence, AI, and Scalability — that are exactly the ones the positioning leans on hardest. That is actually good news: the deficit is concentrated and addressable, rather than smeared across a weak foundation.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="gaps">
+  <span class="h2-num">08</span>
+  <h2>Top 10 gaps</h2>
+
+  <div class="findings">
+    <div class="finding sev-crit">
+      <div class="finding-head"><span class="finding-id">G-01</span><span class="finding-title">Unauthenticated, unscoped anomaly API</span><span class="chip c-crit">Critical</span></div>
+      <p>Seven routes served any anonymous caller production request logs and allowed telemetry, model, and threshold tampering affecting every tenant on the worker.</p>
+      <dl><dt>Evidence</dt><dd>Live <code>HTTP 200</code> on <code>GET /api/anomalies/</code> with real log rows</dd>
+      <dt>Status</dt><dd>Fixed in branch, 12 tests, <strong>awaiting deploy approval</strong></dd></dl>
+    </div>
+
+    <div class="finding sev-crit">
+      <div class="finding-head"><span class="finding-id">G-02</span><span class="finding-title">No AI investigation layer exists</span><span class="chip c-crit">Critical</span></div>
+      <p>The product is positioned "AI-Native". <code>server/modules/llm/</code> is deterministic signal detection for LLM-API <em>traffic</em> — a detection feature, not an investigator. The only inference client is <code>AGENTIC_LLM_ENABLED</code>, which defaults false and is not enabled in production.</p>
+      <dl><dt>Impact</dt><dd>The central marketing claim is not backed by implementation</dd>
+      <dt>Note</dt><dd>The detection work that exists is honest and good — the claim is what overreaches</dd></dl>
+    </div>
+
+    <div class="finding sev-crit">
+      <div class="finding-head"><span class="finding-id">G-03</span><span class="finding-title">Evidence Engine is a stub relative to its billing</span><span class="chip c-crit">Critical</span></div>
+      <p>Two tables and a 1.7 KB packaging module behind a single list endpoint. No per-finding evidence chain, no evidence graph, no "18,421 requests analysed, 27 identities out of scope" narrative the positioning promises.</p>
+      <dl><dt>Impact</dt><dd>The stated moat is the least-built subsystem</dd></dl>
+    </div>
+
+    <div class="finding sev-high">
+      <div class="finding-head"><span class="finding-id">G-04</span><span class="finding-title">Verification loop disabled in production</span><span class="chip c-high">High</span></div>
+      <p><code>STARTUP_ENABLE_CONTINUOUS_TESTING=false</code>. Nothing re-tests a remediated finding, so "prove the fix worked" cannot be demonstrated. Blocked upstream on auth profiles existing.</p>
+    </div>
+
+    <div class="finding sev-high">
+      <div class="finding-head"><span class="finding-id">G-05</span><span class="finding-title">No self-serve path to first value</span><span class="chip c-high">High</span></div>
+      <p>Signup is off, there is no guided connect → discover → first-finding flow, and no time-to-first-value instrumentation. A prospect cannot reach an insight without a human.</p>
+    </div>
+
+    <div class="finding sev-high">
+      <div class="finding-head"><span class="finding-id">G-06</span><span class="finding-title">Enterprise identity is GitHub-only</span><span class="chip c-high">High</span></div>
+      <p>No SAML, generic OIDC, SCIM, or MFA. Every enterprise security questionnaire asks for these in the first ten questions.</p>
+    </div>
+
+    <div class="finding sev-high">
+      <div class="finding-head"><span class="finding-id">G-07</span><span class="finding-title">Unbounded telemetry retention</span><span class="chip c-high">High</span></div>
+      <p>Archiver and warm exporter disabled; no partitioning on <code>request_logs</code>; single node-local PVC. Cost and stability both degrade with the thing that creates value.</p>
+    </div>
+
+    <div class="finding sev-high">
+      <div class="finding-head"><span class="finding-id">G-08</span><span class="finding-title">No false-positive feedback loop</span><span class="chip c-high">High</span></div>
+      <p>Finding statuses model the lifecycle, but analyst verdicts do not feed back into detector tuning, and no false-positive rate is measured. FP rate is the metric security teams churn over.</p>
+    </div>
+
+    <div class="finding sev-med">
+      <div class="finding-head"><span class="finding-id">G-09</span><span class="finding-title">No HA, no DR, no restore test</span><span class="chip c-med">Medium</span></div>
+      <p>Single replica everywhere, no PDB, no NetworkPolicy, no defined RPO/RTO. Acceptable for a demo cluster; not describable as production SaaS.</p>
+    </div>
+
+    <div class="finding sev-med">
+      <div class="finding-head"><span class="finding-id">G-10</span><span class="finding-title">Tenant isolation has no backstop</span><span class="chip c-med">Medium</span></div>
+      <p>Postgres RLS is implemented but <code>TENANT_RLS_ENABLED=false</code>. Isolation depends on every query author remembering the filter — and G-01 proves that assumption fails in practice.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="opps">
+  <span class="h2-num">09</span>
+  <h2>Top 10 opportunities</h2>
+  <p class="lede">Ranked by customer value × security value × competitive value ÷ effort.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th class="num">#</th><th>Opportunity</th><th>Why it wins</th><th>Effort</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>Build the Evidence Engine properly</td><td>Turns the stated moat into the actual product. Every finding gets a chain: requests analysed, identities involved, first observed, affected accounts. This is what makes Sentinel not-a-dashboard.</td><td>L</td></tr>
+      <tr><td class="num">2</td><td>Grounded AI investigation over evidence</td><td>An investigator that may only cite persisted evidence records, labelling FACT / EVIDENCE / INFERENCE / RECOMMENDATION. Grounded-only is both the safety design and the differentiator.</td><td>L</td></tr>
+      <tr><td class="num">3</td><td>Turn the verification loop back on</td><td>Closes detect → fix → prove. No competitor demo lands harder than re-testing a fix live.</td><td>M</td></tr>
+      <tr><td class="num">4</td><td>Lead with eBPF in positioning</td><td>Kernel-level TLS capture with no proxy is already built and genuinely hard. It is the most defensible claim available and is currently undersold.</td><td>S</td></tr>
+      <tr><td class="num">5</td><td>Enable RLS as tenancy backstop</td><td>Converts a class of future bugs from breaches into errors. The code already exists.</td><td>S</td></tr>
+      <tr><td class="num">6</td><td>Guided onboarding to first finding</td><td>Connect → discover → risk → top findings, with time-to-first-value measured. Unblocks self-serve motion entirely.</td><td>M</td></tr>
+      <tr><td class="num">7</td><td>Retention tiering + partitioning</td><td>Protects margin and database health before volume arrives rather than after.</td><td>M</td></tr>
+      <tr><td class="num">8</td><td>FP feedback into detector tuning</td><td>Creates the data flywheel: the longer a customer runs Sentinel, the better it fits them. Hard for a competitor to copy.</td><td>M</td></tr>
+      <tr><td class="num">9</td><td>SAML + OIDC + SCIM</td><td>Removes a hard procurement blocker. Unglamorous, non-optional.</td><td>M</td></tr>
+      <tr><td class="num">10</td><td>Contract test for the WS/query-key invariant</td><td>Cheap CI check that pins <code>WSEventType</code> against the backend enum. Prevents a whole silent-bug category.</td><td>S</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="comp">
+  <span class="h2-num">10</span>
+  <h2>Competitive position</h2>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Capability</th><th>Sentinel</th><th>Field</th><th>Read</th></tr></thead>
+    <tbody>
+      <tr><td>Traffic capture</td><td>eBPF kernel uprobes, no proxy</td><td>Salt/Traceable: mirror, agent, or gateway plugin</td><td><span class="chip c-ok">Advantage</span></td></tr>
+      <tr><td>Inventory + shadow API</td><td>Live upsert from sensor</td><td>Table stakes everywhere</td><td><span class="chip c-med">Parity</span></td></tr>
+      <tr><td>Runtime detection</td><td>11 detectors, 4-agent pipeline</td><td>Mature, ML-heavy at Salt/Traceable</td><td><span class="chip c-med">Behind</span></td></tr>
+      <tr><td>Active testing / DAST</td><td>Nuclei + Schemathesis + ZAP, YAML corpus</td><td>Stronger than most runtime-only vendors</td><td><span class="chip c-ok">Advantage</span></td></tr>
+      <tr><td>Evidence depth</td><td>Records + redaction, no chain</td><td>Traceable's distributed-trace evidence is the bar</td><td><span class="chip c-crit">Behind</span></td></tr>
+      <tr><td>AI investigation</td><td>None</td><td>Every vendor now ships some form</td><td><span class="chip c-crit">Behind</span></td></tr>
+      <tr><td>MCP / AI-agent security</td><td>MCP Shield, agent identity, tool invocation modelled</td><td>Almost nobody has shipped this</td><td><span class="chip c-ok">Open field</span></td></tr>
+      <tr><td>Enterprise identity</td><td>GitHub OAuth</td><td>SAML/SCIM universal</td><td><span class="chip c-crit">Behind</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>The honest answer to "why buy Sentinel"</h3>
+  <p>Today, against Salt or Traceable in a head-to-head enterprise evaluation: <strong>you probably don't</strong>. They are more mature on detection, evidence, and procurement readiness.</p>
+  <p>Where Sentinel can win now is a narrower shot: <strong>Kubernetes-heavy teams who want runtime API security plus active testing without putting a proxy in the data path</strong>. The eBPF sensor plus the DAST corpus is a combination the runtime-only vendors don't have, and the no-proxy install is a real objection-remover for platform teams.</p>
+  <p>The longer play is MCP and AI-agent attack surface, where <code>MCPToolInvocation</code>, <code>AgentIdentity</code>, and <code>AgenticViolation</code> are already modelled and the field is genuinely open. That is a better place to spend differentiation budget than catching up on detection ML.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="roadmap">
+  <span class="h2-num">11</span>
+  <h2>Roadmap</h2>
+  <p class="lede">Sequenced so each phase makes the next one credible.</p>
+
+  <h3>P0 — required for credible production usage</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Item</th><th>Acceptance criteria</th><th>Risk class</th></tr></thead>
+    <tbody>
+      <tr><td>Deploy the anomalies authz fix</td><td>Anonymous request to all 7 routes returns 401 in production; security suite green in CI</td><td><span class="chip c-med">Medium</span></td></tr>
+      <tr><td>Authz regression gate in CI</td><td>A test enumerates every route and fails on any lacking an auth dependency or an explicit allowlist entry</td><td><span class="chip c-low">Safe</span></td></tr>
+      <tr><td>Enable Postgres RLS</td><td><code>TENANT_RLS_ENABLED=true</code>; cross-tenant suite passes with app-level filters removed in a spike</td><td><span class="chip c-high">High</span></td></tr>
+      <tr><td>Retention + partitioning policy</td><td>Documented hot/warm/cold tiers; archiver enabled; <code>request_logs</code> partitioned; growth bounded under load test</td><td><span class="chip c-med">Medium</span></td></tr>
+      <tr><td>Backup + restore test</td><td>Written RPO/RTO; a restore actually performed and timed</td><td><span class="chip c-med">Medium</span></td></tr>
+      <tr><td>Correct the AI positioning</td><td>Public claims match shipped capability until the investigator exists</td><td><span class="chip c-low">Safe</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>P1 — competitive parity</h3>
+  <ul class="tight">
+    <li><strong>Evidence Engine v1.</strong> Per-finding evidence chain API and UI: requests analysed, identities involved, first/last observed, affected accounts, linked raw samples — every number traceable to a persisted record.</li>
+    <li><strong>Verification loop on.</strong> Auth profiles, then continuous testing enabled, then a visible "fix verified" state on the finding timeline.</li>
+    <li><strong>Guided onboarding</strong> with connect-validation, discovery progress, and time-to-first-value measured as a product metric.</li>
+    <li><strong>FP management</strong> — analyst verdict captured, FP rate reported, verdicts feeding detector tuning.</li>
+    <li><strong>SAML + OIDC + SCIM + MFA.</strong></li>
+    <li><strong>HA topology</strong> — multi-replica backend, PDB, NetworkPolicy, managed Postgres.</li>
+  </ul>
+
+  <h3>P2 — strategic differentiation</h3>
+  <ul class="tight">
+    <li><strong>Evidence graph.</strong> Identity → API → endpoint → request → service → data → finding, enabling root cause, attack paths, and blast radius as queries rather than screens.</li>
+    <li><strong>Grounded AI investigator</strong> over that graph, citation-constrained to persisted evidence, with an eval set and measured groundedness before it ships.</li>
+    <li><strong>MCP / AI-agent attack surface</strong> as a named product line — the open field identified above.</li>
+    <li><strong>Policy-as-code</strong> with versioning, testing, exceptions, and audit.</li>
+    <li><strong>Developer remediation workflow</strong> — finding to PR, not finding to ticket.</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="target">
+  <span class="h2-num">12</span>
+  <h2>Target architecture</h2>
+  <p class="lede">Two structural changes; everything else is filling in what already exists.</p>
+
+  <p><strong>First: the evidence graph becomes the spine.</strong> Today detection writes alerts and evidence records as parallel outputs. In the target, every detection emits nodes and edges into a graph keyed by tenant, and findings, risk, impact, and investigation all become queries over it. Root cause and attack path stop being features to build and become traversals.</p>
+
+  <p><strong>Second: AI attaches only to that graph.</strong> The investigator reads evidence subgraphs, never raw customer traffic, and may only cite node IDs that exist. That constraint is simultaneously the anti-hallucination design, the prompt-injection mitigation, the cross-tenant leakage control, and the cost control — because a subgraph is far smaller than a traffic window.</p>
+
+  <div class="pipe">
+    <div class="pipe-stage"><b>Ingest</b><span>eBPF · gateway · k8s · OpenAPI · logs</span></div>
+    <div class="pipe-stage"><b>Normalize</b><span>One event schema, dedup, DLQ</span></div>
+    <div class="pipe-stage"><b>Detect</b><span>Versioned, tunable rules</span></div>
+    <div class="pipe-stage"><b>Evidence graph</b><span>Tenant-keyed nodes and edges</span></div>
+    <div class="pipe-stage"><b>Risk + impact</b><span>Traversal over the graph</span></div>
+    <div class="pipe-stage"><b>Grounded AI</b><span>Cites node IDs only</span></div>
+    <div class="pipe-stage"><b>Verify</b><span>Re-test, feed back</span></div>
+  </div>
+
+  <p>Storage tiers accordingly: hot Postgres for findings, evidence and recent traffic; warm columnar for rollups and historical behaviour; cold object storage for raw samples under a per-tenant retention policy. The warm exporter and archiver already exist in the codebase and are switched off — the target turns them on rather than inventing them.</p>
+
+  <p>The stream engine moves from <code>IN_PROCESS</code> to the already-modelled <code>FLINK</code> option only when ingest volume justifies it. Doing it earlier buys operational cost with no customer benefit.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════ -->
+<section id="status">
+  <span class="h2-num">13</span>
+  <h2>Implementation status</h2>
+
+  <div class="ledger">
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--ok)">Implemented</div>
+      <div class="ledger-val">Auth and tenant scoping across all 7 <code>/api/anomalies</code> routes. Reads require <code>TRAFFIC_READ</code> and filter on <code>account_id</code>; <code>rate-check</code> and <code>sequential-enumeration</code> verify endpoint ownership and return 404 for a foreign endpoint rather than confirming it exists; <code>/log</code> requires <code>TRAFFIC_MANAGE</code> and stamps the account from the caller's token; <code>/train</code> and <code>/tune</code> require ADMIN with their process-global blast radius documented. Fixed at the router layer so detector signatures were left untouched.</div>
+    </div>
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--ok)">Tested</div>
+      <div class="ledger-val"><code>tests/security/test_anomalies_auth.py</code> — 12 tests covering anonymous rejection on every route, tenant scoping of the list, foreign-endpoint 404s, caller-stamped writes, and 403 for non-admin model mutation. All 12 failed before the change; all 12 pass after.</div>
+    </div>
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--ok)">Verified</div>
+      <div class="ledger-val">Full security suite: 136 passed, 2 pre-existing failures. Full unit suite: 878 passed, 3 pre-existing failures. All 5 pre-existing failures were confirmed by re-running them with the fix stashed — they fail identically without it, and sit in files with uncommitted work in the main checkout.</div>
+    </div>
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--high)">Blocked</div>
+      <div class="ledger-val"><strong>Push and deploy.</strong> The commit sits on local branch <code>worktree-sentinel-audit-p0</code>; <code>git push</code> was denied by the environment's permission classifier. Deploying to production is a change you should authorise explicitly rather than have me perform — the live hole remains open until then.</div>
+    </div>
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--ink-faint)">Not implemented</div>
+      <div class="ledger-val">Everything in §11 beyond the anomalies fix. Deliberately so — the brief was audit first, and the remaining P0 items (RLS, retention, DR) are medium-to-high-risk changes that need your sign-off on approach before code.</div>
+    </div>
+  </div>
+
+  <h3>Immediate next step</h3>
+  <p>Review the commit, push it, and roll the backend. Until that deploy lands, <code>GET https://sentinel.wecrew.in/api/anomalies/</code> continues to serve production request logs to anyone who asks.</p>
+</section>
+
+<hr class="end">
+<p class="colophon">
+  Audit performed 2026-08-23 against branch <code>fix/p0-auth-and-console-ui</code> and the live <code>api-sentinel</code> namespace on kind cluster <code>wecrew</code>.<br>
+  Findings are drawn from source inspection, test execution, and read-only probes of the running service. No production configuration was changed.<br>
+  Scores are judgement calls stated to one decimal for comparability, not measurement precision.
+</p>
+
+</div>
