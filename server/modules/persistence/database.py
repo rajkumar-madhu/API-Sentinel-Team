@@ -76,6 +76,20 @@ async def get_read_db():
 
 
 async def apply_tenant_context(session) -> None:
+    """Stamp the tenant onto the DB session so RLS policies can see it.
+
+    Two things here are load-bearing and easy to get wrong:
+
+    ``SET LOCAL`` only survives inside a transaction -- outside one Postgres
+    warns and discards it -- so the transaction is started explicitly first.
+    Scoping to the transaction is the point: the value must not outlive this
+    request on a pooled connection and leak into the next tenant's queries.
+
+    This runs when the session is created, which is *before* the auth dependency
+    has necessarily resolved, so the tenant may not be known yet. That is why
+    ``ensure_tenant_context`` exists and why the policies treat an unset tenant
+    as "no rows" rather than raising.
+    """
     if not settings.TENANT_RLS_ENABLED:
         return
     if "postgres" not in settings.DATABASE_URL:
@@ -83,7 +97,20 @@ async def apply_tenant_context(session) -> None:
     account_id = get_current_account_id()
     if account_id is None:
         return
+    await session.begin()
     await session.execute(
         text(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME} = :account_id"),
-        {"account_id": str(account_id)},
+        {"account_id": str(int(account_id))},
     )
+
+
+async def ensure_tenant_context(session) -> None:
+    """Re-stamp the tenant if it became known after the session was opened.
+
+    FastAPI resolves dependencies in declaration order, so a route that declares
+    ``db`` before its auth dependency opens the session while the tenant
+    contextvar is still empty. Calling this once the tenant is known closes that
+    window. Safe to call repeatedly; a no-op when RLS is off, when the backend
+    is not Postgres, or when no tenant is set.
+    """
+    await apply_tenant_context(session)
