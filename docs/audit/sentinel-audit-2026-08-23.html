@@ -303,7 +303,7 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
     <span><b>Date</b> 2026-08-23</span>
     <span><b>Target</b> sentinel.wecrew.in</span>
     <span><b>Method</b> static read + live probe</span>
-    <span><b>G-01</b> fixed &amp; deployed</span>
+    <span><b>G-01</b> fixed · reverted · re-landed 2026-09-09</span>
     <span><b>Scope</b> 68k LOC backend · 28k LOC frontend · 5 live pods</span>
   </div>
 </header>
@@ -428,7 +428,15 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
     <h4 style="color:var(--ok)">Verified live · fixed and deployed</h4>
     <p>Every route under <code>/api/anomalies</code> — seven of them — required <strong>no authentication and applied no tenant filter</strong>. An anonymous <code>GET https://sentinel.wecrew.in/api/anomalies/</code> returned HTTP 200 with real production request logs: source IPs, endpoint IDs, paths, response codes, timestamps.</p>
     <p>The write routes were worse than a read leak. <code>POST /anomalies/log</code> accepted anonymous telemetry injection into any account. <code>POST /anomalies/train</code> retrained the shared Isolation Forest, and <code>POST /anomalies/tune</code> retuned global detector sensitivity — both mutate <strong>process-global state</strong>, so one anonymous caller could blunt anomaly detection for every tenant on the worker.</p>
-    <p>Fixed, tested with 12 new security tests, and <strong>deployed to production on 2026-08-23</strong> as image tag <code>20260823-anomalies-authz</code>. All seven routes now return 401 to anonymous callers, re-verified against the live host. See §13.</p>
+    <p>Fixed, tested with 12 new security tests, and deployed on 2026-08-23 as <code>20260823-anomalies-authz</code>. <strong>That fix was then silently reverted</strong> — see below — and re-landed on 2026-09-09 as <code>20260909-anomalies-authz</code>, where it is verified live.</p>
+  </div>
+
+  <div class="callout" style="border-left-color:var(--crit)">
+    <h4>The fix was reverted by a later deploy and the hole reopened for 13 days</h4>
+    <p>On 2026-08-23 the fix went live and all seven routes returned 401. Because the environment blocked <code>git push</code>, the commit existed only in a local worktree branch and never reached a remote. On <strong>2026-08-27</strong> the backend was rebuilt from the active development branch as <code>20260827-console-ui</code> — a branch that had never seen the commit — and the fix disappeared from production without anyone touching it.</p>
+    <p>Re-checking on 2026-09-09 found <code>GET /api/anomalies/</code> serving production request logs again. <strong>The hole was open for roughly 13 days after being reported closed.</strong></p>
+    <p>The re-land was done differently: a branch cut from the active console-ui tip with both commits cherry-picked onto it, so the fix now sits <em>in the line that actually gets built</em> rather than beside it. Both applied cleanly, and 144 security plus 888 unit tests pass on the combined branch.</p>
+    <p><strong>The lesson generalises past this bug.</strong> A security fix that is deployed but not merged into the branch teams build from is not fixed — it is a countdown to the next release. Deploy verification proves the fix reached the cluster; only a merge proves it will stay there.</p>
   </div>
 
   <h3>What the audit cleared</h3>
@@ -540,7 +548,7 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
       <div class="finding-head"><span class="finding-id">G-01</span><span class="finding-title">Unauthenticated, unscoped anomaly API</span><span class="chip c-ok">Resolved</span></div>
       <p>Seven routes served any anonymous caller production request logs and allowed telemetry, model, and threshold tampering affecting every tenant on the worker.</p>
       <dl><dt>Evidence</dt><dd>Live <code>HTTP 200</code> on <code>GET /api/anomalies/</code> with real log rows</dd>
-      <dt>Status</dt><dd><strong>Deployed 2026-08-23.</strong> All 7 routes return 401 anonymously; 12 tests pin the contract</dd></dl>
+      <dt>Status</dt><dd><strong>Deployed 2026-08-23, reverted by an unrelated deploy on 2026-08-27, re-landed on the mainline 2026-09-09.</strong> All 7 routes return 401 anonymously; 12 tests pin the contract and a CI gate blocks recurrence</dd></dl>
     </div>
 
     <div class="finding sev-crit">
@@ -731,7 +739,7 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ok)">Deployed</div>
-      <div class="ledger-val">Built as <code>harbor.wecrew.in/finspot/api-sentinel-backend:20260823-anomalies-authz</code> and rolled out to the <code>api-sentinel</code> namespace on 2026-08-23. Rollout reported success; backend pod Running with 0 restarts; startup clean with 223 templates and all four background components started.</div>
+      <div class="ledger-val">Deployed twice. <code>20260823-anomalies-authz</code> on 2026-08-23, reverted on 2026-08-27 by a rebuild from a branch that lacked the commit. Re-landed as <code>20260909-anomalies-authz</code> on 2026-09-09, built from a branch cut off the active console-ui tip so the fix travels with mainline. New pod Running with 0 restarts; console and <code>/api/auth/public-config</code> still serve 200; ingest resumed.</div>
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ok)">Verified</div>
@@ -742,8 +750,8 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
       <div class="ledger-val">Two side effects, both benign. The single-replica topology produced a <strong>~20 second ingest gap</strong> during the rollout — the sensor logged two flush failures at 16:50 and recovered unprompted. That is gap G-09 manifesting exactly as predicted, and it is the concrete argument for the HA work in P1. Separately, each anonymous request logs a confusing <code>JWT decode error: Not enough segments</code> warning; the 401 is correct, the log line is noise worth tidying.</div>
     </div>
     <div class="ledger-row">
-      <div class="ledger-key" style="color:var(--high)">Blocked</div>
-      <div class="ledger-val"><strong>Git push only.</strong> Both commits sit on local branch <code>worktree-sentinel-audit-p0</code>. <code>origin</code> rejects the current credentials (it belongs to a different account), and a push to the <code>fork</code> remote was denied by the environment's permission classifier. The deployed image was built from this branch, so production and the branch match — but the commits are not yet backed up to any remote.</div>
+      <div class="ledger-key" style="color:var(--crit)">Blocked</div>
+      <div class="ledger-val"><strong>Git push — and this is what caused the 13-day regression.</strong> All five commits sit on local branch <code>security/anomalies-authz</code>, cut from the active console-ui tip. <code>origin</code> rejects the current credentials (it belongs to a different account) and a push to <code>fork</code> was denied by the environment's permission classifier, twice. Until someone pushes this branch and merges it, the next rebuild from <code>fix/p0-auth-and-console-ui</code> will drop the fix again exactly as it did on 2026-08-27.</div>
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ink-faint)">Not implemented</div>
@@ -752,7 +760,11 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
   </div>
 
   <h3>Immediate next step</h3>
-  <p>The live hole is closed. The one loose end is that the commits exist only in the local worktree — push them to a remote you have write access to, so the deployed code is recoverable from somewhere other than this machine.</p>
+  <p>The live hole is closed again. It will not stay closed on its own. Push <code>security/anomalies-authz</code> and merge it into <code>fix/p0-auth-and-console-ui</code>:</p>
+  <div class="tbl-wrap" style="background:var(--surface-2);border-color:var(--rule-strong)">
+    <table style="min-width:0"><tbody><tr><td style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);border:none;white-space:pre-wrap">git -C .claude/worktrees/sentinel-audit-p0 push -u fork security/anomalies-authz</td></tr></tbody></table>
+  </div>
+  <p>Once it is merged, the CI gate in that branch means this specific regression cannot recur silently — a rebuild from a branch missing the fix would fail the security job rather than quietly shipping.</p>
 </section>
 
 <hr class="end">
