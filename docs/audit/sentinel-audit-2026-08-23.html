@@ -432,7 +432,17 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
   </div>
 
   <h3>What the audit cleared</h3>
-  <p>Every other unauthenticated route is unauthenticated by design and carries its own inline auth: sensor heartbeat and ingest resolve a sensor key, the GitHub and Stripe webhooks verify signatures, and login / signup / OAuth callback are necessarily public. I checked all of them individually rather than trusting the pattern.</p>
+  <p>Every other unauthenticated route is unauthenticated by design and carries its own inline auth: sensor heartbeat and ingest resolve a sensor key, the GitHub, GitLab and Stripe webhooks verify signatures, and login / signup / OAuth callback are necessarily public. I checked all of them individually rather than trusting the pattern.</p>
+
+  <p>A route-by-route enumeration puts numbers on it: of <strong>343 registered method/path pairs, 321 carry an auth dependency</strong> and 22 are public by design. That enumeration is now a CI gate rather than a one-off — see below.</p>
+
+  <h4>One low-severity disclosure, left in place deliberately</h4>
+  <p><code>GET /api/cicd/badge/{account_id}</code> serves a public SVG showing a tenant's last CI gate result, so it can be embedded in a README the way any CI badge is. Because it keys on a sequential <code>account_id</code>, last-gate status is enumerable across tenants. The disclosure is thin — <code>PASSED</code>, <code>FAILED</code> or <code>unknown</code> — and requiring authentication would defeat the endpoint's purpose. The right fix is an unguessable per-project badge token, which is a product decision rather than a patch, so I have recorded it instead of changing behaviour.</p>
+
+  <h3>The category is now gated, not just the instance</h3>
+  <p>Fixing seven routes closes one hole. The more useful outcome is that the same mistake can no longer ship: <code>tests/security/test_route_auth_coverage.py</code> walks the real FastAPI dependency tree of every registered route and fails the build on anything unguarded that is not on an explicit, reasoned allowlist.</p>
+  <p>Walking the whole tree rather than the top level is what makes it work — <code>require_role</code> and <code>require_permission</code> both return closures that <em>depend on</em> <code>require_auth</code>, so the guard is nested rather than direct. The gate also fails on stale allowlist entries, so a removed public path cannot later exempt an unrelated route that reuses it, and it anchors on a known-public route so a refactor that breaks the traversal surfaces instead of turning the whole check inert.</p>
+  <p>Proven by injecting an unguarded route at runtime: the gate fails on it, and does not false-positive on a route added with a normal permission dependency. CI needed no change — the security job already runs <code>pytest tests/security/</code>.</p>
 
   <h4>Gaps that remain</h4>
   <ul class="tight">
@@ -647,7 +657,7 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
     <thead><tr><th>Item</th><th>Acceptance criteria</th><th>Risk class</th></tr></thead>
     <tbody>
       <tr><td>Deploy the anomalies authz fix <span class="chip c-ok">Done</span></td><td>Anonymous request to all 7 routes returns 401 in production; security suite green in CI</td><td><span class="chip c-med">Medium</span></td></tr>
-      <tr><td>Authz regression gate in CI</td><td>A test enumerates every route and fails on any lacking an auth dependency or an explicit allowlist entry</td><td><span class="chip c-low">Safe</span></td></tr>
+      <tr><td>Authz regression gate in CI <span class="chip c-ok">Done</span></td><td>A test enumerates every route and fails on any lacking an auth dependency or an explicit allowlist entry</td><td><span class="chip c-low">Safe</span></td></tr>
       <tr><td>Enable Postgres RLS</td><td><code>TENANT_RLS_ENABLED=true</code>; cross-tenant suite passes with app-level filters removed in a spike</td><td><span class="chip c-high">High</span></td></tr>
       <tr><td>Retention + partitioning policy</td><td>Documented hot/warm/cold tiers; archiver enabled; <code>request_logs</code> partitioned; growth bounded under load test</td><td><span class="chip c-med">Medium</span></td></tr>
       <tr><td>Backup + restore test</td><td>Written RPO/RTO; a restore actually performed and timed</td><td><span class="chip c-med">Medium</span></td></tr>
@@ -712,8 +722,12 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
       <div class="ledger-val">Auth and tenant scoping across all 7 <code>/api/anomalies</code> routes. Reads require <code>TRAFFIC_READ</code> and filter on <code>account_id</code>; <code>rate-check</code> and <code>sequential-enumeration</code> verify endpoint ownership and return 404 for a foreign endpoint rather than confirming it exists; <code>/log</code> requires <code>TRAFFIC_MANAGE</code> and stamps the account from the caller's token; <code>/train</code> and <code>/tune</code> require ADMIN with their process-global blast radius documented. Fixed at the router layer so detector signatures were left untouched.</div>
     </div>
     <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--ok)">Implemented</div>
+      <div class="ledger-val"><strong>Authz regression gate.</strong> <code>tests/security/test_route_auth_coverage.py</code> walks the dependency tree of all 343 registered routes and fails the build on anything unguarded that is not on a reasoned allowlist — closing the category, not just the instance. Joins the existing CI security job with no workflow change.</div>
+    </div>
+    <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ok)">Tested</div>
-      <div class="ledger-val"><code>tests/security/test_anomalies_auth.py</code> — 12 tests covering anonymous rejection on every route, tenant scoping of the list, foreign-endpoint 404s, caller-stamped writes, and 403 for non-admin model mutation. All 12 failed before the change; all 12 pass after.</div>
+      <div class="ledger-val"><code>tests/security/test_anomalies_auth.py</code> — 12 tests covering anonymous rejection on every route, tenant scoping of the list, foreign-endpoint 404s, caller-stamped writes, and 403 for non-admin model mutation. All 12 failed before the change; all 12 pass after. Plus 4 tests in the coverage gate, including one that anchors the traversal so the gate cannot silently go inert.</div>
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ok)">Deployed</div>
@@ -721,7 +735,7 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ok)">Verified</div>
-      <div class="ledger-val"><strong>Pre-deploy:</strong> security suite 136 passed, unit suite 878 passed. The 5 failures in those runs are pre-existing — confirmed by re-running each with the fix stashed, where they fail identically. <strong>Post-deploy, against the live host:</strong> all 7 anomaly routes return 401 to anonymous callers (previously 200 with production data). Health endpoint reports database connected and detection pipeline <code>active</code>. Sensor ingest confirmed resumed by observing new <code>request_logs</code> rows land after the rollout.</div>
+      <div class="ledger-val"><strong>Pre-deploy:</strong> security suite 140 passed, unit suite 878 passed. The 5 failures across those runs are pre-existing — confirmed by re-running each with the fix stashed, where they fail identically, and all sit in files with uncommitted work in the main checkout. <strong>Post-deploy, against the live host:</strong> all 7 anomaly routes return 401 to anonymous callers (previously 200 with production data). Health endpoint reports database connected and detection pipeline <code>active</code>. Sensor ingest confirmed resumed by observing new <code>request_logs</code> rows land after the rollout. <strong>Gate:</strong> proven by runtime fault injection, not just by passing.</div>
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--med)">Observed</div>
