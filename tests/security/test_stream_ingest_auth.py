@@ -149,7 +149,7 @@ async def test_stream_ebpf_redacts_query_values_in_logs_and_broadcasts(
             "events": [
                 {
                     "method": "GET",
-                    "path": "/admin?q=<script>alert(1)</script>&token=raw-ebpf-token&api_key=raw-ebpf-key",
+                    "path": "/orders?q=<script>alert(1)</script>&token=raw-ebpf-token&api_key=raw-ebpf-key",
                     "status": 200,
                     "source_ip": "198.51.100.30",
                     "ts": 1710000000000,
@@ -164,7 +164,7 @@ async def test_stream_ebpf_redacts_query_values_in_logs_and_broadcasts(
             select(RequestLog).where(RequestLog.source_ip == "198.51.100.30")
         )
     ).scalar_one()
-    assert request_log.path == "/admin?q=****&token=****&api_key=****"
+    assert request_log.path == "/orders?q=****&token=****&api_key=****"
     event = (
         await db_session.execute(
             select(MaliciousEventRecord).where(MaliciousEventRecord.ip == "198.51.100.30")
@@ -173,10 +173,10 @@ async def test_stream_ebpf_redacts_query_values_in_logs_and_broadcasts(
     alert = (
         await db_session.execute(select(Alert).where(Alert.source_ip == "198.51.100.30"))
     ).scalar_one()
-    assert event.url == "/admin?q=****&token=****&api_key=****"
-    assert alert.endpoint == "/admin?q=****&token=****&api_key=****"
+    assert event.url == "/orders?q=****&token=****&api_key=****"
+    assert alert.endpoint == "/orders?q=****&token=****&api_key=****"
     assert broadcasts[0]["account_id"] == sensor.account_id
-    assert broadcasts[0]["message"]["data"]["path"] == "/admin?q=****&token=****&api_key=****"
+    assert broadcasts[0]["message"]["data"]["path"] == "/orders?q=****&token=****&api_key=****"
     stored_and_broadcast = f"{event.url} {alert.message} {alert.endpoint} {broadcasts}"
     assert "raw-ebpf-token" not in stored_and_broadcast
     assert "raw-ebpf-key" not in stored_and_broadcast

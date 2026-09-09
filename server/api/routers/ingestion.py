@@ -49,12 +49,15 @@ async def _upsert_endpoint(db, account_id: int, method: str, path: str, host: st
     else:
         # Get or create default collection
         col_res = await db.execute(
-            select(APICollection).where(
+            select(APICollection)
+            .where(
                 APICollection.account_id == account_id,
                 APICollection.name == "Default Inventory",
             )
+            .order_by(APICollection.created_at.asc(), APICollection.id.asc())
+            .limit(1)
         )
-        col = col_res.scalar_one_or_none()
+        col = col_res.scalars().first()
         if not col:
             col = APICollection(account_id=account_id, name="Default Inventory", host="all-hosts", type="MIRRORING")
             db.add(col)

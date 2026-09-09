@@ -16,7 +16,7 @@ const SystemHealthLayout: React.FC = () => {
   ];
 
   const handleTabChange = (key: string) => {
-    navigate(`/system-health/${key}`);
+    navigate(`/admin/system-health/${key}`);
   };
 
   return (

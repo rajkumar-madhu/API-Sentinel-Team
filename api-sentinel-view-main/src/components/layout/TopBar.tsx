@@ -130,7 +130,7 @@ export const TopBar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace }) 
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <button
             onClick={openMobileSidebar}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-bg-elevated/60 text-text-muted transition-colors hover:text-text-primary hover:border-brand/20 lg:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border-subtle bg-bg-elevated/60 text-text-muted transition-colors hover:text-text-primary hover:border-brand/20 lg:hidden"
             aria-label="Open navigation"
           >
             <Menu size={15} />
@@ -269,7 +269,7 @@ export const TopBar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace }) 
           {/* Search */}
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 h-8 px-2.5 rounded-lg border border-border-subtle bg-bg-elevated/50 text-muted-foreground hover:text-text-primary hover:border-brand/20 transition-all outline-none"
+            className="flex h-10 items-center gap-2 rounded-xl border border-border-subtle bg-bg-elevated/50 px-3 text-muted-foreground transition-all outline-none hover:border-brand/20 hover:text-text-primary"
           >
             <Search size={13} />
             <span className="hidden sm:inline text-[11px]">Search</span>
@@ -280,7 +280,7 @@ export const TopBar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace }) 
 
           <button
             onClick={handleRefresh}
-            className="w-7 h-7 rounded-lg border border-border-subtle bg-bg-elevated/50 flex items-center justify-center text-muted-foreground hover:text-brand hover:border-brand/20 transition-all outline-none"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border-subtle bg-bg-elevated/50 text-muted-foreground transition-all outline-none hover:border-brand/20 hover:text-brand"
           >
             <RefreshCw size={13} />
           </button>
@@ -288,7 +288,7 @@ export const TopBar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace }) 
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="w-7 h-7 rounded-lg border border-border-subtle bg-bg-elevated/50 flex items-center justify-center text-muted-foreground hover:text-brand hover:border-brand/20 transition-all outline-none"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-border-subtle bg-bg-elevated/50 text-muted-foreground transition-all outline-none hover:border-brand/20 hover:text-brand"
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? <Sun size={13} /> : <Moon size={13} />}
@@ -302,7 +302,7 @@ export const TopBar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace }) 
               onClick={() => setUserMenuOpen(v => !v)}
               className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-lg hover:bg-bg-hover transition-colors outline-none"
             >
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white shadow-sm bg-gradient-to-br from-brand to-brand-dark ring-2 ring-brand/20">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-dark text-[11px] font-bold text-white shadow-sm ring-2 ring-brand/20">
                 {initials}
               </div>
               <div className="hidden md:block text-left">

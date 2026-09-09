@@ -42,15 +42,23 @@ class EndpointDiscovery:
         """
         normalized = self._normalize_entry(entry)
 
-        query = select(APIEndpoint).where(
-            APIEndpoint.account_id == normalized["account_id"],
-            APIEndpoint.method == normalized["method"],
-            APIEndpoint.host == normalized["host"],
-            APIEndpoint.path_pattern == normalized["path_pattern"],
+        query = (
+            select(APIEndpoint)
+            .where(
+                APIEndpoint.account_id == normalized["account_id"],
+                APIEndpoint.method == normalized["method"],
+                APIEndpoint.host == normalized["host"],
+                APIEndpoint.path_pattern == normalized["path_pattern"],
+            )
+            .order_by(APIEndpoint.created_at.asc(), APIEndpoint.id.asc())
+            .limit(1)
         )
 
         result = await self.db.execute(query)
-        endpoint = result.scalar_one_or_none()
+        # Older databases may contain duplicate catalogue rows. Prefer the
+        # oldest row while uniqueness migrations repair those databases;
+        # ingestion must never turn that data drift into an HTTP 500.
+        endpoint = result.scalars().first()
         tags = self._merged_tags(
             endpoint.tags if endpoint else None,
             source=normalized["source"],
@@ -101,12 +109,15 @@ class EndpointDiscovery:
 
     async def _default_collection_id(self, account_id: int) -> str:
         result = await self.db.execute(
-            select(APICollection).where(
+            select(APICollection)
+            .where(
                 APICollection.account_id == account_id,
                 APICollection.name == _DEFAULT_COLLECTION_NAME,
             )
+            .order_by(APICollection.created_at.asc(), APICollection.id.asc())
+            .limit(1)
         )
-        collection = result.scalar_one_or_none()
+        collection = result.scalars().first()
         if collection is None:
             collection = APICollection(
                 account_id=account_id,

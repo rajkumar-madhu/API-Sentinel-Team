@@ -81,7 +81,16 @@ async def test_organization_invite_and_members_are_tenant_scoped(client, db_sess
         json={"email": "analyst@example.com", "role": "AUDITOR"},
     )
     assert invited.status_code == 200
-    user_id = invited.json()["user_id"]
+    invite_body = invited.json()
+    user_id = invite_body["user_id"]
+    assert invite_body.get("temporary_password")
+    assert "INVITE_PENDING" not in str(invite_body.get("temporary_password"))
+
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "analyst@example.com", "password": invite_body["temporary_password"]},
+    )
+    assert login.status_code == 200
 
     own_members = await client.get("/api/organization/1000000/members", headers=_headers(1000000))
     assert own_members.status_code == 200

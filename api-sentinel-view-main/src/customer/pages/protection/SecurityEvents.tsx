@@ -57,7 +57,7 @@ const SecurityEvents: React.FC = () => {
   const sevCount = useSeverityCount();
   const categoryCount = useThreatCategoryCount();
 
-  const rows = data?.securityEvents ?? [];
+  const rows = useMemo(() => data?.securityEvents ?? [], [data?.securityEvents]);
   const total = data?.total ?? 0;
   const sc = sevCount.data?.severityCount ?? {};
 
@@ -140,7 +140,9 @@ const SecurityEvents: React.FC = () => {
     { name: 'Minor', value: sc.LOW ?? 0, color: '#EAB308' },
     { name: 'Info', value: sc.INFO ?? 0, color: '#22C55E' },
   ];
-  const totalEvents = filteredRows.length || sevData.reduce((s, d) => s + d.value, 0);
+  // Keep the headline tied to the paginated backend total. Severity aggregates
+  // are a separate query and may use a different window or scope.
+  const totalEvents = total;
 
   const categories = Object.entries(categoryCount.data?.categoryCount ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCat = categories.length > 0 ? (categories[0][1] as number) : 1;

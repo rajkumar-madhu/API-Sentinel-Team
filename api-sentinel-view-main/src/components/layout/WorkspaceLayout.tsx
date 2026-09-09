@@ -26,7 +26,7 @@ const WorkspaceShellInner: React.FC<{ workspace: WorkspaceConfig }> = ({ workspa
           ref={contentRef}
           id="app-content"
           className={cn(
-            'min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5',
+            'min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 sm:px-4 sm:py-5 lg:px-6',
             workspace.key === 'customer' && 'evd-root',
           )}
         >

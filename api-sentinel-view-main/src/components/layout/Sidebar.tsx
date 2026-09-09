@@ -34,7 +34,7 @@ export const Sidebar: React.FC<{ workspace: WorkspaceConfig }> = ({ workspace })
     if (!isDesktop && isMobileSidebarOpen) {
       closeMobileSidebar();
     }
-  }, [location.pathname]);
+  }, [closeMobileSidebar, isDesktop, isMobileSidebarOpen, location.pathname]);
 
   const visibleNav = workspace.navItems;
   const visibleBottom = workspace.bottomItems;

@@ -4,7 +4,8 @@ import {
   Activity, Shield, Ban, Zap, Download, X, RefreshCw, Search, Filter, Copy, Pause, Play,
 } from 'lucide-react';
 import QueryError from '@/components/shared/QueryError';
-import { fetchWithSession, get } from '@/lib/api-client';
+import PageHeader from '@/components/shared/PageHeader';
+import { fetchWithSession } from '@/lib/api-client';
 import { useLiveTraffic, type LiveLogEntry } from '@/lib/realtime';
 import {
   formatAbsolute, formatClock, formatLatency, formatProtocol, formatRelative, methodTone, statusTone,
@@ -13,9 +14,67 @@ import EvidencePanel from '@/components/ui/EvidencePanel';
 import EvidenceSectionHead from '@/components/ui/EvidenceSectionHead';
 import EvidenceStamp from '@/components/ui/EvidenceStamp';
 import EvidenceLedgerItem from '@/components/ui/EvidenceLedger';
+import { useApiCollections } from '@/hooks/use-discovery';
+import type { AktoApiCollection } from '@/services/discovery.service';
 
 type SeverityFilter = 'ALL' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
 type MethodFilter = 'ALL' | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'OTHER';
+
+const KNOWN_APP_LABELS: Record<string, string> = {
+  harbor: 'Harbor Registry',
+  'api-sentinel': 'API Sentinel',
+  'api-sentinel-frontend': 'API Sentinel Console',
+  'api-sentinel-backend': 'API Sentinel API',
+  sentinel: 'API Sentinel',
+  n8n: 'n8n',
+  'n8n-admin': 'n8n Admin',
+  hermes: 'Hermes',
+  dashboard: 'Hermes Dashboard',
+  keycloak: 'Keycloak',
+};
+
+function normalizeHost(host: string): string {
+  return host.trim().toLowerCase().split(':')[0];
+}
+
+function titleCaseToken(token: string): string {
+  return token
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/** Prefer inventory display name; otherwise a readable label from the host. */
+function resolveApplicationName(host: string | undefined, collections: AktoApiCollection[]): string {
+  if (!host?.trim()) return 'Unknown application';
+  const normalized = normalizeHost(host);
+  const match = collections.find((collection) => {
+    const collectionHost = normalizeHost(collection.hostName || '');
+    if (!collectionHost || collectionHost === 'all-hosts' || collectionHost === 'internal') return false;
+    return (
+      collectionHost === normalized
+      || normalized.endsWith(`.${collectionHost}`)
+      || collectionHost.endsWith(`.${normalized}`)
+    );
+  });
+  if (match?.displayName?.trim()) return match.displayName.trim();
+
+  const labels = normalized.split('.').filter(Boolean);
+  for (const label of labels) {
+    if (KNOWN_APP_LABELS[label]) return KNOWN_APP_LABELS[label];
+  }
+  if (labels[0]) return titleCaseToken(labels[0]);
+  return host;
+}
+
+/** Shorten digests / UUIDs so the path stays scannable in the table. */
+function summarizePath(path: string): string {
+  if (!path) return '—';
+  return path
+    .replace(/sha256:[a-f0-9]{16,}/gi, (match) => `${match.slice(0, 15)}…`)
+    .replace(/\/[a-f0-9]{24,}/gi, (match) => `/${match.slice(1, 9)}…`);
+}
 
 function maxEntrySeverity(attacks: LiveLogEntry['attacks']): string {
   if (!attacks.length) return '';
@@ -42,12 +101,13 @@ function methodBucket(method: string): MethodFilter {
   return 'OTHER';
 }
 
-function exportCsv(rows: LiveLogEntry[]): void {
-  const header = 'Timestamp,IP,Host,Method,Path,Status,Protocol,LatencyMs,Threats\n';
+function exportCsv(rows: LiveLogEntry[], collections: AktoApiCollection[]): void {
+  const header = 'Timestamp,Application,IP,Host,Method,Path,Status,Protocol,LatencyMs,Threats\n';
   const body = rows
     .map((r) => {
       const threats = r.attacks.map((a) => `${a.category}(${a.severity})`).join('; ');
-      return `"${r.timestamp}","${r.ip}","${r.host ?? ''}","${r.method}","${r.path}",${r.status},"${r.protocol ?? ''}",${r.latencyMs ?? ''},"${threats}"`;
+      const application = resolveApplicationName(r.host, collections);
+      return `"${r.timestamp}","${application}","${r.ip}","${r.host ?? ''}","${r.method}","${r.path}",${r.status},"${r.protocol ?? ''}",${r.latencyMs ?? ''},"${threats}"`;
     })
     .join('\n');
   const blob = new Blob([header + body], { type: 'text/csv' });
@@ -59,12 +119,12 @@ function exportCsv(rows: LiveLogEntry[]): void {
   URL.revokeObjectURL(url);
 }
 
-function computeStats(rows: LiveLogEntry[], activeSensors: number) {
+function computeStats(rows: LiveLogEntry[], streamConnected: boolean) {
   const now = Date.now();
   const recent = rows.filter((r) => new Date(r.timestamp).getTime() >= now - 60_000);
   const threats = rows.filter((r) => r.attacks.length > 0).length;
   const blockedIps = new Set(rows.filter((r) => r.attacks.length > 0).map((r) => r.ip)).size;
-  return { reqPerMin: recent.length, threats, blockedIps, sensors: activeSensors };
+  return { reqPerMin: recent.length, threats, blockedIps, streamConnected };
 }
 
 async function copyText(value: string): Promise<void> {
@@ -79,6 +139,8 @@ const METHOD_FILTERS: MethodFilter[] = ['ALL', 'GET', 'POST', 'PUT', 'DELETE', '
 
 const LiveFeed: React.FC = () => {
   const { connected, recentLogs, clearLogs, seedLogs } = useLiveTraffic();
+  const { data: collectionsData } = useApiCollections();
+  const collections = useMemo(() => collectionsData?.apiCollections ?? [], [collectionsData?.apiCollections]);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('ALL');
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,13 +148,7 @@ const LiveFeed: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const tableBodyRef = useRef<HTMLDivElement>(null);
-
-  const { data: sensorsData } = useQuery({
-    queryKey: ['live-feed', 'sensors'],
-    queryFn: () => get<{ sensors: { status: string }[] }>('/sensors/').catch(() => ({ sensors: [] })),
-    refetchInterval: 30_000,
-  });
-  const activeSensors = (sensorsData?.sensors ?? []).filter((s) => s.status === 'ONLINE').length;
+  const mobileTableBodyRef = useRef<HTMLDivElement>(null);
 
   const { isLoading: initialLoading, isError, refetch } = useQuery({
     queryKey: ['live-feed', 'recent'],
@@ -113,6 +169,8 @@ const LiveFeed: React.FC = () => {
         protocol: d.protocol ? String(d.protocol) : '',
         latencyMs: typeof d.latency_ms === 'number' ? d.latency_ms : null,
         source: d.source ? String(d.source) : '',
+        userId: d.user_id ? String(d.user_id) : null,
+        hasBody: Boolean(d.has_body),
       }));
       seedLogs(items);
       return items;
@@ -145,42 +203,44 @@ const LiveFeed: React.FC = () => {
       if (methodFilter !== 'ALL' && methodBucket(e.method) !== methodFilter) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const hay = `${e.ip} ${e.path} ${e.host ?? ''} ${e.method} ${e.status}`.toLowerCase();
+        const application = resolveApplicationName(e.host, collections).toLowerCase();
+        const hay = `${e.ip} ${e.path} ${e.host ?? ''} ${application} ${e.method} ${e.status}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [recentLogs, severityFilter, methodFilter, searchQuery]);
+  }, [recentLogs, severityFilter, methodFilter, searchQuery, collections]);
 
   const selected = filteredEntries.find((e) => e.id === selectedId) ?? filteredEntries[0] ?? null;
-  const stats = useMemo(() => computeStats(recentLogs, activeSensors), [recentLogs, activeSensors]);
+  const selectedApplication = selected ? resolveApplicationName(selected.host, collections) : '';
+  const stats = useMemo(() => computeStats(recentLogs, connected), [recentLogs, connected]);
   const newest = recentLogs[0];
 
   return (
-    <div className="space-y-5 w-full p-4 pb-10 animate-fade-in">
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="evd-display text-xl" style={{ color: 'var(--evd-paper)' }}>
-            LIVE TRAFFIC FEED
-          </h1>
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
+    <div className="space-y-5 w-full max-w-[1600px] p-3 sm:p-4 lg:p-6 pb-10 animate-fade-in mx-auto">
+      <PageHeader
+        eyebrow="Monitoring"
+        title="Live traffic"
+        description="Observe HTTP requests captured by the connected eBPF sensor pipeline."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
             <EvidenceStamp tone={connected ? 'ok' : 'warn'} pulse>
-              {connected ? 'STREAM NOMINAL' : 'RECONNECTING'}
+              {connected ? 'Stream nominal' : 'Reconnecting'}
             </EvidenceStamp>
-            {paused && <EvidenceStamp tone="warn">PAUSED</EvidenceStamp>}
+            {paused && <EvidenceStamp tone="warn">Paused</EvidenceStamp>}
             <span className="evd-mono text-[11px]" style={{ color: 'var(--evd-ink-muted)' }}>
-              eBPF → /v1/events · {filteredEntries.length}/{recentLogs.length} ROWS
+              {filteredEntries.length}/{recentLogs.length} rows
               {newest ? ` · last ${formatRelative(newest.timestamp, now)}` : ''}
             </span>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="evd-ledger">
         <EvidenceLedgerItem icon={Activity} color="var(--evd-signal)" label="Requests / min" value={stats.reqPerMin} />
-        <EvidenceLedgerItem icon={Shield} color="var(--evd-critical)" label="Threats" value={stats.threats} />
+        <EvidenceLedgerItem icon={Shield} color="var(--evd-critical)" label="Flagged events" value={stats.threats} />
         <EvidenceLedgerItem icon={Ban} color="var(--evd-medium)" label="Flagged IPs" value={stats.blockedIps} />
-        <EvidenceLedgerItem icon={Zap} color="var(--evd-low)" label="Active Sensors" value={stats.sensors} />
+        <EvidenceLedgerItem icon={Zap} color={stats.streamConnected ? 'var(--evd-low)' : 'var(--evd-medium)'} label="Realtime" value={stats.streamConnected ? 'ON' : 'OFF'} />
       </div>
 
       <EvidencePanel exhibit="EXH-LIVE">
@@ -188,7 +248,7 @@ const LiveFeed: React.FC = () => {
           <EvidenceSectionHead code="§LF" title="Event Stream" desc="HTTP ONLY · WS FRAMES SUPPRESSED" />
           <div className="flex items-center gap-2 flex-wrap">
             <div
-              className="flex items-center gap-2 px-3 py-1.5"
+              className="flex items-center gap-2 px-3 py-1.5 w-full sm:w-auto"
               style={{ border: '1px solid var(--evd-line)', background: 'var(--evd-panel-raised)' }}
             >
               <Filter size={12} style={{ color: 'var(--evd-ink-muted)' }} />
@@ -205,13 +265,13 @@ const LiveFeed: React.FC = () => {
               </select>
             </div>
             <div
-              className="flex items-center gap-2 px-3 py-1.5 flex-1 min-w-[180px]"
+              className="flex items-center gap-2 px-3 py-1.5 w-full sm:flex-1 sm:min-w-[180px]"
               style={{ border: '1px solid var(--evd-line)', background: 'var(--evd-panel-raised)' }}
             >
               <Search size={12} style={{ color: 'var(--evd-ink-muted)' }} />
               <input
                 type="text"
-                placeholder="IP, host, path, method…"
+                placeholder="App, host, path, method…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="evd-mono text-[11px] bg-transparent outline-none w-full"
@@ -236,7 +296,7 @@ const LiveFeed: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => exportCsv(filteredEntries)}
+              onClick={() => exportCsv(filteredEntries, collections)}
               className="evd-btn"
               aria-label="Export CSV"
               title="Export CSV"
@@ -272,6 +332,7 @@ const LiveFeed: React.FC = () => {
             onClick={() => {
               setPaused(false);
               tableBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+              mobileTableBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             className="evd-link mb-3"
           >
@@ -280,11 +341,11 @@ const LiveFeed: React.FC = () => {
         )}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <div ref={tableBodyRef} onScroll={handleScroll} className="overflow-auto" style={{ maxHeight: 580 }}>
+          <div ref={tableBodyRef} onScroll={handleScroll} className="hidden md:block overflow-auto" style={{ maxHeight: 580 }}>
             <table className="evd-table min-w-[720px]">
               <thead className="sticky top-0 z-10">
                 <tr>
-                  {['Time', 'Source', 'Method', 'Host / Path', 'Status', 'Proto', 'Latency', 'Threat'].map((h) => (
+                  {['Date / time', 'Source IP', 'Method', 'Application', 'Status', 'Proto', 'Latency', 'Threat'].map((h) => (
                     <th key={h}>{h}</th>
                   ))}
                 </tr>
@@ -329,6 +390,8 @@ const LiveFeed: React.FC = () => {
                   const mc = methodTone(entry.method);
                   const sc = statusTone(entry.status);
                   const isSelected = selected?.id === entry.id;
+                  const application = resolveApplicationName(entry.host, collections);
+                  const pathSummary = summarizePath(entry.path);
                   return (
                     <tr
                       key={entry.id}
@@ -337,6 +400,9 @@ const LiveFeed: React.FC = () => {
                       style={attacks.length ? { background: 'var(--evd-signal-dim)' } : undefined}
                     >
                       <td className="whitespace-nowrap">
+                        <div className="evd-mono text-[10px] tabular-nums" title={formatAbsolute(entry.timestamp)}>
+                          {formatAbsolute(entry.timestamp)}
+                        </div>
                         <div className="evd-mono text-[11px] tabular-nums">{formatClock(entry.timestamp)}</div>
                         <div className="evd-mono text-[10px]" style={{ color: 'var(--evd-ink-muted)' }}>
                           {formatRelative(entry.timestamp, now)}
@@ -348,13 +414,26 @@ const LiveFeed: React.FC = () => {
                           {entry.method}
                         </span>
                       </td>
-                      <td className="max-w-[320px]">
+                      <td className="max-w-[340px]">
+                        <div className="truncate text-[12px] font-semibold" title={application} style={{ color: 'var(--evd-paper)' }}>
+                          {application}
+                        </div>
+                        <div
+                          className="evd-mono text-[11px] truncate"
+                          title={entry.path}
+                          style={{ color: 'var(--evd-ink-muted)' }}
+                        >
+                          {pathSummary}
+                        </div>
                         {entry.host ? (
-                          <div className="evd-mono text-[10px] truncate" style={{ color: 'var(--evd-ink-muted)' }}>
+                          <div
+                            className="evd-mono text-[10px] truncate"
+                            title={entry.host}
+                            style={{ color: 'var(--evd-ink-muted)' }}
+                          >
                             {entry.host}
                           </div>
                         ) : null}
-                        <div className="evd-mono text-[12px] truncate">{entry.path}</div>
                       </td>
                       <td className="evd-mono text-[12px] font-bold tabular-nums" style={{ color: sc }}>
                         {entry.status || '—'}
@@ -381,6 +460,68 @@ const LiveFeed: React.FC = () => {
             </table>
           </div>
 
+          <div className="md:hidden space-y-2" ref={mobileTableBodyRef} onScroll={handleScroll}>
+            {initialLoading && recentLogs.length === 0 &&
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-24 animate-pulse" style={{ background: 'var(--evd-panel-raised)', border: '1px solid var(--evd-line)' }} />
+              ))}
+            {!initialLoading && filteredEntries.length === 0 && (
+              <div className="p-6 text-center" style={{ border: '1px solid var(--evd-line)' }}>
+                <p className="evd-mono text-[11px]" style={{ color: 'var(--evd-ink-muted)' }}>
+                  {connected ? 'No HTTP request logs for this tenant yet.' : 'Disconnected — reconnecting…'}
+                </p>
+              </div>
+            )}
+            {filteredEntries.map((entry) => {
+              const attacks = entry.attacks ?? [];
+              const topAttack = attacks[0] ?? null;
+              const isSelected = selected?.id === entry.id;
+              const application = resolveApplicationName(entry.host, collections);
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => setSelectedId(entry.id)}
+                  className="w-full text-left p-3 transition-colors"
+                  style={{
+                    border: `1px solid ${isSelected ? 'var(--evd-signal)' : 'var(--evd-line)'}`,
+                    background: attacks.length ? 'var(--evd-signal-dim)' : 'var(--evd-panel-raised)',
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="evd-mono text-[10px] font-bold" style={{ color: methodTone(entry.method).text }}>
+                          {entry.method}
+                        </span>
+                        <span className="evd-mono text-[10px]" style={{ color: statusTone(entry.status) }}>
+                          {entry.status || '—'}
+                        </span>
+                        {entry.hasBody && <span className="evd-badge" style={{ color: 'var(--evd-signal)' }}>BODY</span>}
+                      </div>
+                      <div className="truncate mt-1 text-[12px] font-semibold" style={{ color: 'var(--evd-paper)' }}>
+                        {application}
+                      </div>
+                      <div className="evd-mono text-[11px] truncate mt-0.5" style={{ color: 'var(--evd-ink-muted)' }}>
+                        {summarizePath(entry.path)}
+                      </div>
+                      <div className="evd-mono text-[10px] truncate mt-1" style={{ color: 'var(--evd-ink-muted)' }}>
+                        {entry.host || entry.ip || 'unknown source'}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="evd-mono text-[10px]" title={formatAbsolute(entry.timestamp)} style={{ color: 'var(--evd-ink-muted)' }}>
+                        {formatAbsolute(entry.timestamp)}
+                      </div>
+                      <div className="evd-mono text-[10px]" style={{ color: 'var(--evd-ink-muted)' }}>{formatRelative(entry.timestamp, now)}</div>
+                      {topAttack && <div className="evd-badge mt-2" style={{ color: severityColor(topAttack.severity) }}>{topAttack.category}</div>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
           <aside className="evd-inspector">
             {selected ? (
               <div className="space-y-3">
@@ -393,16 +534,19 @@ const LiveFeed: React.FC = () => {
                   </button>
                 </div>
                 <dl className="evd-kv">
+                  <div><dt>Application</dt><dd>{selectedApplication}</dd></div>
                   <div><dt>Observed</dt><dd>{formatAbsolute(selected.timestamp)}</dd></div>
                   <div><dt>Age</dt><dd>{formatRelative(selected.timestamp, now)}</dd></div>
                   <div><dt>Source IP</dt><dd>{selected.ip || '—'}</dd></div>
-                  <div><dt>Host</dt><dd>{selected.host || '—'}</dd></div>
+                  <div><dt>Host</dt><dd className="break-all">{selected.host || '—'}</dd></div>
                   <div><dt>Method</dt><dd>{selected.method}</dd></div>
                   <div><dt>Path</dt><dd className="break-all">{selected.path}</dd></div>
                   <div><dt>Status</dt><dd style={{ color: statusTone(selected.status) }}>{selected.status || '—'}</dd></div>
                   <div><dt>Protocol</dt><dd>{formatProtocol(selected.protocol)}</dd></div>
                   <div><dt>Latency</dt><dd>{formatLatency(selected.latencyMs)}</dd></div>
                   <div><dt>Source</dt><dd>{selected.source || 'ebpf'}</dd></div>
+                  <div><dt>Identity</dt><dd className="break-all">{selected.userId || '—'}</dd></div>
+                  <div><dt>Evidence</dt><dd>{selected.hasBody ? 'Request/response body captured' : 'Headers and metadata only'}</dd></div>
                   <div>
                     <dt>Threat</dt>
                     <dd>
@@ -415,7 +559,7 @@ const LiveFeed: React.FC = () => {
               </div>
             ) : (
               <p className="evd-mono text-[11px]" style={{ color: 'var(--evd-ink-muted)' }}>
-                Select a row to inspect host, timing, and threat overlay.
+                Select a row to inspect application, host, timing, and threat overlay.
               </p>
             )}
           </aside>

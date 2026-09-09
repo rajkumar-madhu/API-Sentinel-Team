@@ -1,10 +1,13 @@
 """Organization — tenant-scoped account, members, and attention inbox."""
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.future import select
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.models.core import Account, User, APIEndpoint, Vulnerability, TestRun
+from server.modules.auth.password_hasher import PasswordHasher
 from server.modules.auth.rbac import RBAC, Permission
 from server.modules.organization.attention import build_attention
 from server.modules.persistence.database import get_db
@@ -169,7 +172,9 @@ async def invite_member(
 ):
     """
     Invite a new member to the caller's organization.
-    Creates a placeholder User record (no password — user sets it on first login).
+
+    Creates the user with a one-time temporary password returned in this
+    response only — share it out of band; there is no email invite flow yet.
     """
     _require_own_account(user, account_id)
     try:
@@ -189,10 +194,11 @@ async def invite_member(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
 
+    temporary_password = secrets.token_urlsafe(18)
     invited = User(
         account_id=account_id,
         email=email,
-        password_hash="INVITE_PENDING",
+        password_hash=PasswordHasher.hash_password(temporary_password),
         role=invited_role,
     )
     db.add(invited)
@@ -202,7 +208,8 @@ async def invite_member(
         "user_id": invited.id,
         "email": email,
         "role": invited.role,
-        "note": "User must set password on first login",
+        "temporary_password": temporary_password,
+        "note": "Share the temporary password out of band. It is shown only once.",
     }
 
 

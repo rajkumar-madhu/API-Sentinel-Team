@@ -328,12 +328,15 @@ class NormalizationAgent:
             return endpoint.id
 
         collection_result = await db.execute(
-            select(APICollection).where(
+            select(APICollection)
+            .where(
                 APICollection.account_id == account_id,
                 APICollection.name == "Default Inventory",
             )
+            .order_by(APICollection.created_at.asc(), APICollection.id.asc())
+            .limit(1)
         )
-        collection = collection_result.scalar_one_or_none()
+        collection = collection_result.scalars().first()
         if collection is None:
             collection = APICollection(account_id=account_id, name="Default Inventory", host="all-hosts", type="MIRRORING")
             db.add(collection)

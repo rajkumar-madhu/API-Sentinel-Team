@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchModuleInfo,
+  fetchSensors,
   fetchTeamData,
   fetchCustomRoles,
   fetchAuditLogs,
@@ -21,6 +22,15 @@ export function useModuleInfo() {
     queryFn: ({ signal }) => fetchModuleInfo(signal),
     staleTime: 5_000,
     refetchInterval: 5_000,
+  });
+}
+
+export function useSensors() {
+  return useQuery({
+    queryKey: ['admin', 'sensors'],
+    queryFn: ({ signal }) => fetchSensors(signal),
+    staleTime: 5_000,
+    refetchInterval: 10_000,
   });
 }
 

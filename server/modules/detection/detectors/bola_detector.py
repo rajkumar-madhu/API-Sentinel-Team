@@ -66,7 +66,7 @@ class BOLADetector:
         # Only flag ownership mismatch when we have a known owner from state
         # (not just object_key != actor_id, which fires on nearly every request)
         if not signals and envelope.object_key and actor_id and object_state is not None:
-            known_owner = object_state.get("last_known_owner")
+            known_owner = getattr(object_state, "last_known_owner_actor", None)
             if known_owner and known_owner != actor_id and envelope.method in ("PUT", "PATCH", "DELETE"):
                 signals.append(
                     build_signal(

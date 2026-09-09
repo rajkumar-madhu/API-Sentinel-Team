@@ -47,6 +47,8 @@ export interface LiveLogEntry {
   protocol?: string;
   latencyMs?: number | null;
   source?: string;
+  userId?: string | null;
+  hasBody?: boolean;
 }
 
 type RealtimeMessage = { type: WSEventType | 'log_entry'; data?: unknown };
@@ -78,6 +80,12 @@ function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Stable traffic identity when WS/REST disagree on id (legacy broadcasts). */
+function trafficFingerprint(entry: LiveLogEntry): string {
+  const path = (entry.path || '').split('?', 1)[0];
+  return `${entry.timestamp}|${entry.ip}|${entry.method}|${path}|${entry.status}`;
+}
+
 function normalizeLogEntry(raw: unknown): LiveLogEntry | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Record<string, unknown>;
@@ -97,7 +105,31 @@ function normalizeLogEntry(raw: unknown): LiveLogEntry | null {
     protocol: d.protocol ? String(d.protocol) : '',
     latencyMs: typeof latencyRaw === 'number' ? latencyRaw : latencyRaw != null ? Number(latencyRaw) : null,
     source: d.source ? String(d.source) : '',
+    userId: d.user_id ? String(d.user_id) : null,
+    hasBody: Boolean(d.has_body),
   };
+}
+
+function mergeUniqueLogs(current: LiveLogEntry[], incoming: LiveLogEntry[]): LiveLogEntry[] {
+  const byId = new Map<string, LiveLogEntry>();
+  const fpToId = new Map<string, string>();
+
+  const upsert = (entry: LiveLogEntry) => {
+    const fp = trafficFingerprint(entry);
+    const priorId = fpToId.get(fp);
+    if (priorId && priorId !== entry.id) {
+      byId.delete(priorId);
+    }
+    byId.set(entry.id, entry);
+    fpToId.set(fp, entry.id);
+  };
+
+  for (const entry of current) upsert(entry);
+  for (const entry of incoming) upsert(entry);
+
+  return [...byId.values()]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, MAX_LIVE_LOGS);
 }
 
 interface RealtimeContextValue {
@@ -142,9 +174,8 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearLogs = useCallback(() => setRecentLogs([]), []);
 
   const seedLogs = useCallback((entries: LiveLogEntry[]) => {
-    setRecentLogs(
-      entries.filter((e) => !NON_HTTP_LIVE_METHODS.has(e.method.toUpperCase())).slice(0, MAX_LIVE_LOGS),
-    );
+    const httpEntries = entries.filter((e) => !NON_HTTP_LIVE_METHODS.has(e.method.toUpperCase()));
+    setRecentLogs((current) => mergeUniqueLogs(current, httpEntries));
   }, []);
 
   useEffect(() => {
@@ -169,7 +200,7 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           if (msg.type === 'log_entry') {
             const entry = normalizeLogEntry(msg.data);
             if (!entry) return;
-            setRecentLogs((prev) => [entry, ...prev].slice(0, MAX_LIVE_LOGS));
+            setRecentLogs((prev) => mergeUniqueLogs(prev, [entry]));
             listenersRef.current.forEach((fn) => fn(entry));
           }
         } catch {

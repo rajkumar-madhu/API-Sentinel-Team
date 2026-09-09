@@ -148,29 +148,55 @@ def _malicious_record_path(record: MaliciousEventRecord) -> str:
     if host and url.startswith(host):
         rest = url[len(host):]
         return (rest or "/").split("?", 1)[0]
+    # Sensor detections persist `host + path` in `url` while older records
+    # may leave the dedicated host column empty. Strip that host prefix so
+    # correlation still compares the same path as RequestLog.path.
+    if "/" in url:
+        return f"/{url.split('/', 1)[1]}".split("?", 1)[0] or "/"
     return url.split("?", 1)[0] or "/"
 
 
-def _threat_overlay(events: list[MaliciousEventRecord]) -> dict[tuple[str, str], dict[str, str]]:
-    """Map (ip, path) → threat. Never paint a whole ingress IP with one hit."""
-    overlay: dict[tuple[str, str], dict[str, str]] = {}
+def _threat_overlay(
+    events: list[MaliciousEventRecord],
+) -> dict[tuple[str, str, str], list[tuple[int, dict[str, str]]]]:
+    """Index detections by request identity and detection time.
+
+    A source IP/path pair is not a request identity.  Using only those fields
+    caused one old detection to be painted onto every later request to the
+    same path.  Keep the detection timestamp so recent-feed rows can only
+    inherit a signal from the matching request window.
+    """
+    overlay: dict[tuple[str, str, str], list[tuple[int, dict[str, str]]]] = {}
     for event in events:
-        if not event.ip or not event.category:
+        if not event.ip or not event.category or not event.detected_at:
             continue
-        overlay[(event.ip, _malicious_record_path(event))] = {
-            "category": event.category,
-            "severity": event.severity or "MEDIUM",
-        }
+        key = (event.ip, _malicious_record_path(event), (event.method or "").upper())
+        overlay.setdefault(key, []).append(
+            (
+                int(event.detected_at),
+                {
+                    "category": event.category,
+                    "severity": event.severity or "MEDIUM",
+                },
+            )
+        )
     return overlay
 
 
 def _attacks_for_log(
-    overlay: dict[tuple[str, str], dict[str, str]],
+    overlay: dict[tuple[str, str, str], list[tuple[int, dict[str, str]]]],
     log: RequestLog,
 ) -> list[dict[str, str]]:
     path = redact_ingestion_path(log.path or "/").split("?", 1)[0]
-    hit = overlay.get((log.source_ip or "", path))
-    return [hit] if hit else []
+    key = (log.source_ip or "", path, (log.method or "").upper())
+    request_ts = int(log.created_at.timestamp() * 1000) if log.created_at else 0
+    if not request_ts:
+        return []
+    return [
+        attack
+        for detected_at, attack in overlay.get(key, [])
+        if abs(detected_at - request_ts) <= 2_000
+    ]
 
 
 def _detect_attacks(path: str, headers: dict) -> list[dict]:
@@ -367,7 +393,14 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
             user_id=ev.get("user_id"),
         )
 
+        req_body = persistable_body(req.get("body"))
+        resp_body = persistable_body(resp.get("body"))
+        user_id = persistable_identity(ev.get("user_id"))
+        # Assign the PK before commit so live WS rows share the same id as
+        # /stream/recent — otherwise the client invents one and duplicates.
+        log_id = str(uuid.uuid4())
         db.add(RequestLog(
+            id=log_id,
             account_id=account_id,
             endpoint_id=endpoint_id,
             source_ip=source_ip,
@@ -377,9 +410,9 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
             protocol=str(protocol)[:32] if protocol else None,
             response_code=status,
             response_time_ms=latency_ms,
-            request_body=persistable_body(req.get("body")),
-            response_body=persistable_body(resp.get("body")),
-            user_id=persistable_identity(ev.get("user_id")),
+            request_body=req_body,
+            response_body=resp_body,
+            user_id=user_id,
             user_role=persistable_identity(ev.get("user_role"), max_len=64),
             session_id=persistable_identity(ev.get("session_id") or ev.get("auth_session_id")),
             created_at=ts,
@@ -465,6 +498,7 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
                     ))
 
         ws_batch.append({
+            "id": log_id,
             "ip": source_ip,
             "method": method,
             "path": safe_path,
@@ -476,6 +510,8 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
             "attacks": attacks,
             "blocked": False,
             "source": "ebpf",
+            "user_id": user_id,
+            "has_body": bool(req_body or resp_body),
         })
 
     await db.commit()
@@ -602,6 +638,9 @@ async def websocket_live(websocket: WebSocket):
                     "host": request_log.host or "",
                     "status": request_log.response_code,
                     "latency_ms": request_log.response_time_ms,
+                    "protocol": request_log.protocol or "",
+                    "user_id": request_log.user_id,
+                    "has_body": bool(request_log.request_body or request_log.response_body),
                     "timestamp": request_log.created_at.isoformat() if request_log.created_at else None,
                     "attacks": _attacks_for_log(overlay, request_log),
                     "blocked": False,

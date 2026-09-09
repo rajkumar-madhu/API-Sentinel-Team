@@ -15,6 +15,18 @@ export interface AktoModuleInfo {
   policyVersion?: string;
 }
 
+export interface SensorRecord {
+  id: string;
+  name: string;
+  host?: string | null;
+  version?: string | null;
+  status: 'ONLINE' | 'OFFLINE' | 'DEGRADED' | string;
+  lines_shipped: number;
+  events_detected: number;
+  last_heartbeat?: string | null;
+  created_at?: string | null;
+}
+
 export interface AktoTeamMember {
   id: string;
   login: string;
@@ -100,6 +112,10 @@ export interface AccountSettingsPayload {
 
 export async function fetchModuleInfo(signal?: AbortSignal) {
   return post<{ moduleInfos: AktoModuleInfo[] }>('/fetchModuleInfo', {}, signal);
+}
+
+export async function fetchSensors(signal?: AbortSignal) {
+  return get<SensorRecord[]>('/sensors/', signal);
 }
 
 export async function rebootModules(moduleIds: string[], signal?: AbortSignal) {

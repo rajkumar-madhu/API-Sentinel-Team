@@ -28,10 +28,10 @@ const GlassCard: React.FC<GlassCardProps> = ({
     <div
       onClick={onClick}
       className={cn(
-        'rounded-[2px] border transition-all duration-200',
+        'rounded-2xl border shadow-[0_8px_24px_rgba(15,23,42,0.05)] transition-all duration-200',
         variantStyles[variant],
         glow && 'shadow-[0_0_20px_rgba(99,44,175,0.06)]',
-        hoverLift && 'hover:translate-y-[-2px] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08),0_0_0_1px_rgba(99,44,175,0.1)]',
+        hoverLift && 'hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,0.10)]',
         onClick && 'cursor-pointer',
         className
       )}

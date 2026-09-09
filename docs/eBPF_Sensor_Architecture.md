@@ -35,14 +35,18 @@ The eBPF sensor is a **zero-overhead TLS plaintext capture system** that runs at
 - Every HTTPS request and response passing through a monitored server
 - HTTP/1.1 and HTTP/2 (including gRPC) traffic
 - OpenSSL and GnuTLS libraries
+- Request/response bodies when available, subject to capture and redaction limits
+- WebSocket upgrade/frame metadata and MCP/SSE detection when observed
+- Optional Go `crypto/tls` probes when supported binaries and offsets are present
 - IP addresses, ports, latency, container identity
 - Works for ALL processes on the system (pid = -1 scope)
 
-### What It Does NOT Capture
+### What It Does NOT Guarantee
 
-- Request/response bodies (headers + metadata only)
-- Traffic not using libssl or libgnutls (e.g., Go's stdlib crypto/tls)
-- UDP-based QUIC/HTTP/3 traffic
+- Complete bodies when TLS calls are fragmented, capped, or unavailable to probes
+- Go `crypto/tls` coverage when no supported Go binary is present on the node
+- Full HTTP/3/QUIC header decoding from every QUIC implementation
+- Full WebSocket message reassembly across fragmented frames
 
 ---
 
@@ -122,7 +126,7 @@ The eBPF sensor is a **zero-overhead TLS plaintext capture system** that runs at
 │    │                                                                  │
 │    ▼                                                                  │
 │  send_batch_with_client()                                            │
-│    → POST /api/stream/ingest                                        │
+│    → POST /v1/events                                                │
 │    → Authorization: Bearer {sensor_key}                             │
 │    → JSON body: { version: "v1", events: [...] }                    │
 └──────────────────────────────────────────────────────────────────────┘
@@ -325,14 +329,13 @@ StreamState {
 #### `Http2Conn` — per-connection HTTP/2 parser state
 ```rust
 Http2Conn {
-    buffer: Vec<u8>,                     // accumulated frame bytes
+    request_buffer: Vec<u8>,             // request-direction frame bytes
+    response_buffer: Vec<u8>,            // response-direction frame bytes
     seen_preface: bool,                  // "PRI * HTTP/2.0" seen
-    pending_request: Option<ParsedRequest>,
-    last_status: Option<String>,
-    last_request_ts: u64,
+    pending_requests: HashMap<u32, ParsedRequest>,
     last_event_ts: u64,                  // every event
-    last_emit_ts: u64,                   // only on actual event emission
-    hpack: HpackDecoder,                 // per-connection HPACK state
+    request_hpack: HpackDecoder,         // request endpoint HPACK context
+    response_hpack: HpackDecoder,        // response endpoint HPACK context
 }
 ```
 
@@ -676,12 +679,12 @@ After applying all fixes, the sensor captured all 4 HTTPS test requests:
 
 | Protocol | Status | Notes |
 |----------|--------|-------|
-| Go `crypto/tls` | ❌ Not supported | Go has its own TLS, doesn't use libssl |
+| Go `crypto/tls` | ⚠️ Optional | Requires `--go-tls`, supported Go offsets, and a Go binary on the node |
 | Node.js TLS | ⚠️ Partial | Depends on how OpenSSL is linked |
-| HTTP/3 / QUIC | ❌ Not supported | UDP-based, different capture approach needed |
-| WebSocket frames | ❌ Not supported | Upgrade detected but WS frames not parsed |
-| gRPC body | ⚠️ Metadata only | Method/path captured, protobuf body not decoded |
-| MCP/SSE | ❌ Not supported | SSE frame parser not yet implemented |
+| HTTP/3 / QUIC | ⚠️ Partial | QUIC probes and metadata extraction depend on supported libraries |
+| WebSocket frames | ⚠️ Partial | Frames are parsed; fragmented message reassembly is limited |
+| gRPC body | ⚠️ Partial | Length-prefixed protobuf fields are decoded when recognizable |
+| MCP/SSE | ⚠️ Partial | SSE/JSON-RPC metadata and injection signals are extracted when observed |
 
 ### 9.2 Technical Limitations
 
@@ -689,7 +692,7 @@ After applying all fixes, the sensor captured all 4 HTTPS test requests:
 |-------|--------|------------|
 | Async runtime correlation | TCP tuple wrong for goroutines/tokio async | Phase 2: SSL_set_fd() probe |
 | No SSL_new() probe | Can't detect TLS version, cipher suite | Add SSL_new + SSL_get_version probes |
-| Body not captured | Can't detect payload-based attacks (JSON injection) | Planned: configurable body capture |
+| Body capture is bounded | Large or fragmented payloads may be truncated | Preserve caps and expose capture limits in telemetry |
 | MAX_DATA = 4096 | Truncates large requests | Configurable via BPF map update |
 | cgroup v2 only on k8s | Container enrichment only works in Kubernetes | N/A for bare-metal |
 

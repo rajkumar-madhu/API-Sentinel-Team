@@ -136,6 +136,8 @@ async def build_attention(
     open_findings: list[Vulnerability] = []
     resolved_count = 0
     new_in_window = 0
+    # Resolve time is not persisted on Vulnerability; do not invent a window
+    # counter from created_at (that mislabels old findings closed recently).
     resolved_in_window = 0
     for vulnerability in vulnerabilities:
         status = _norm(vulnerability.status, "OPEN")
@@ -144,8 +146,6 @@ async def build_attention(
             created = created.replace(tzinfo=timezone.utc)
         if status in CLOSED_FINDING_STATUSES:
             resolved_count += 1
-            if created is not None and created >= cutoff:
-                resolved_in_window += 1
             continue
         if status in OPEN_FINDING_STATUSES or not status:
             open_findings.append(vulnerability)

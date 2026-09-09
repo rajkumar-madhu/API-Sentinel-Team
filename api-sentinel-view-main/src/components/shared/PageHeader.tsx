@@ -11,11 +11,11 @@ const PageHeader: React.FC<{
   <div className={cn('flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between', className)}>
     <div className="min-w-0">
       {eyebrow && (
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+        <p className="mb-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted">
           {eyebrow}
         </p>
       )}
-      <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-text-primary">
+      <h1 className="text-[1.5rem] font-semibold leading-tight tracking-tight text-text-primary">
         {title}
       </h1>
       {description && (

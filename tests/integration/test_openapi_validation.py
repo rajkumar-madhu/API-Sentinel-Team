@@ -20,7 +20,16 @@ def _headers_for_role(role: str, account_id: int = 1000000) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_openapi_rebuild_and_validate(client, auth_headers):
+async def test_openapi_rebuild_and_validate(client, db_session, auth_headers, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    # The spec generator reads endpoints through the global AsyncSessionLocal;
+    # bind it to the test engine so it sees the test schema.
+    session_factory = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    monkeypatch.setattr(
+        "server.modules.api_inventory.openapi_generator.AsyncSessionLocal", session_factory
+    )
+
     rebuild = await client.post("/api/openapi/rebuild", headers=auth_headers)
     assert rebuild.status_code == 200
     spec_id = rebuild.json().get("id")

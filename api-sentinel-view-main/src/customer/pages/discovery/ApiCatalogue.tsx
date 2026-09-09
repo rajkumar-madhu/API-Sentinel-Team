@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useMemo, useRef } from 'react';
 import { RefreshCw, Download, Globe, Eye, ShieldOff, Upload, Search, X, GitBranch, FileCheck, KeyRound, Ghost } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DonutChart from '@/components/charts/DonutChart';
@@ -122,8 +122,12 @@ const ApiCatalogue: React.FC = () => {
   };
 
   const totalApis = collections.data?.apiCollections?.reduce((s, c) => s + (c.urlsCount || 0), 0) ?? 0;
-  const rows = apiInfos.data?.apiInfoList ?? [];
+  const rows = useMemo(() => apiInfos.data?.apiInfoList ?? [], [apiInfos.data?.apiInfoList]);
   const total = apiInfos.data?.total ?? 0;
+  const hostCollectionForRow = useCallback(
+    (row: AktoApiInfo) => collections.data?.apiCollections?.find(c => c.id === row.id.apiCollectionId),
+    [collections.data?.apiCollections],
+  );
 
   // Filter rows based on search query
   const filteredRows = useMemo(() => {
@@ -135,10 +139,7 @@ const ApiCatalogue: React.FC = () => {
       (hostCollectionForRow(row)?.hostName?.toLowerCase().includes(query)) ||
       (hostCollectionForRow(row)?.displayName?.toLowerCase().includes(query))
     );
-  }, [rows, searchQuery]);
-
-  const hostCollectionForRow = (row: AktoApiInfo) => 
-    collections.data?.apiCollections?.find(c => c.id === row.id.apiCollectionId);
+  }, [hostCollectionForRow, rows, searchQuery]);
 
   // Export handler
   const handleExport = () => {
@@ -206,15 +207,17 @@ const ApiCatalogue: React.FC = () => {
       const lifecycle = getApiLifecycleStatus(r, hostCollection);
       return lifecycle.isShadow;
     }).length;
-  }, [filteredRows]);
+  }, [filteredRows, hostCollectionForRow]);
   const zombieCandidates = useMemo(() => {
     return filteredRows.filter(r => {
       const hostCollection = hostCollectionForRow(r);
       const lifecycle = getApiLifecycleStatus(r, hostCollection);
       return lifecycle.isZombie;
     }).length;
-  }, [filteredRows]);
-  const specCoverage = totalApis > 0 ? Math.round((authCounts.auth / Math.max(1, totalApis)) * 100) : 0;
+  }, [filteredRows, hostCollectionForRow]);
+  const authenticatedShare = filteredRows.length > 0
+    ? Math.round((authCounts.auth / filteredRows.length) * 100)
+    : 0;
   const methodEntries = Object.entries(methodDist).sort((a, b) => b[1] - a[1]);
   const maxMethod = methodEntries[0]?.[1] ?? 1;
   const from = filteredRows.length === 0 ? 0 : page * pageSize + 1;
@@ -271,7 +274,7 @@ const ApiCatalogue: React.FC = () => {
         <EvidenceLedgerItem icon={ShieldOff} color="var(--evd-high)" label="Shadow" value={shadowCandidates} />
         <EvidenceLedgerItem icon={Ghost} color="var(--evd-medium)" label="Zombie" value={zombieCandidates} />
         <EvidenceLedgerItem icon={Globe} color="var(--evd-signal)" label="MCP" value={mcpEndpoints} />
-        <EvidenceLedgerItem icon={Eye} color="var(--evd-low)" label="Auth coverage" value={specCoverage} suffix="%" />
+        <EvidenceLedgerItem icon={Eye} color="var(--evd-low)" label="Authenticated" value={authenticatedShare} suffix="%" />
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">

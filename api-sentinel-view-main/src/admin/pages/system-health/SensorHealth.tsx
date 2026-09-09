@@ -1,78 +1,101 @@
 import React from 'react';
-import { RefreshCw, Radio } from 'lucide-react';
-import TableSkeleton from '@/components/shared/TableSkeleton';
+import { Activity, RefreshCw, Radio, Server, WifiOff } from 'lucide-react';
 import QueryError from '@/components/shared/QueryError';
 import StatusPulse from '@/components/ui/StatusPulse';
-import { useModuleInfo } from '@/hooks/use-admin';
+import { useSensors } from '@/hooks/use-admin';
 import { useQueryClient } from '@tanstack/react-query';
 
-function formatTs(epoch: number) {
-  if (!epoch) return '-';
-  const d = new Date(epoch * 1000);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
-    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+function formatTs(value?: string | null) {
+  if (!value) return 'No heartbeat recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Invalid heartbeat';
+  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 const SensorHealth: React.FC = () => {
   const qc = useQueryClient();
-  const { data, isLoading, isError, refetch } = useModuleInfo();
-
-  const modules = data?.moduleInfos ?? [];
-  const sensors = modules.filter(m =>
-    (m.moduleName || '').toLowerCase().includes('runtime') ||
-    (m.moduleName || '').toLowerCase().includes('mirror') ||
-    (m.moduleName || '').toLowerCase().includes('sensor')
-  );
+  const { data: sensors = [], isLoading, isError, refetch } = useSensors();
+  const online = sensors.filter((sensor) => sensor.status === 'ONLINE').length;
+  const degraded = sensors.filter((sensor) => sensor.status === 'DEGRADED').length;
 
   return (
-    <div className="space-y-4 animate-fade-in w-full">
+    <div className="w-full space-y-5 animate-fade-in">
       {isError && <QueryError message="Failed to load sensor health data" onRetry={() => refetch()} />}
 
-      <div className="bg-bg-surface border border-border-subtle rounded-xl overflow-hidden flex flex-col min-h-[500px]">
-        <div className="p-3 border-b border-border-subtle flex items-center justify-between">
-          <span className="text-xs font-bold text-text-primary flex items-center gap-2">
-            <Radio size={14} className="text-sev-low" />
-            Sensors
-            <span className="text-[11px] bg-bg-elevated border border-border-subtle px-2 py-0.5 rounded-full text-text-muted">{sensors.length}</span>
-          </span>
-          <button onClick={() => qc.invalidateQueries({ queryKey: ['admin', 'modules'] })}
-            className="w-7 h-7 rounded-lg border border-border-subtle bg-bg-surface flex items-center justify-center text-muted-foreground hover:text-brand transition-all outline-none">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'Registered', value: sensors.length, icon: Server, tone: 'text-text-primary' },
+          { label: 'Online', value: online, icon: Activity, tone: 'text-sev-low' },
+          { label: 'Degraded', value: degraded, icon: WifiOff, tone: degraded ? 'text-sev-high' : 'text-text-muted' },
+        ].map(({ label, value, icon: Icon, tone }) => (
+          <div key={label} className="rounded-xl border border-border-subtle bg-bg-surface p-4">
+            <div className="flex items-center justify-between text-text-muted">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em]">{label}</span>
+              <Icon size={15} />
+            </div>
+            <div className={`mt-2 text-2xl font-semibold tabular-nums ${tone}`}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border-subtle bg-bg-surface">
+        <div className="flex items-center justify-between gap-3 border-b border-border-subtle p-4">
+          <div className="flex items-center gap-2">
+            <Radio size={15} className="text-sev-low" />
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary">Registered sensors</h2>
+              <p className="mt-0.5 text-xs text-text-muted">Heartbeat and shipped-event state from the tenant sensor registry.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Refresh sensor health"
+            onClick={() => qc.invalidateQueries({ queryKey: ['admin', 'sensors'] })}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-bg-surface text-muted-foreground transition-colors hover:border-brand/30 hover:text-brand"
+          >
             <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
           </button>
         </div>
 
-        {isLoading ? <TableSkeleton columns={6} rows={3} /> : (
-          <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left border-collapse table-fixed min-w-[550px]">
+        {isLoading ? (
+          <div className="grid gap-3 p-4 sm:grid-cols-2">
+            {[1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-lg bg-bg-elevated" />)}
+          </div>
+        ) : sensors.length === 0 ? (
+          <div className="p-10 text-center">
+            <Radio size={24} className="mx-auto text-text-muted" />
+            <p className="mt-3 text-sm font-medium text-text-primary">No sensors registered</p>
+            <p className="mt-1 text-xs text-text-muted">Register a sensor to start collecting traffic for this workspace.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] border-collapse text-left">
               <thead className="bg-bg-base/50">
                 <tr>
-                  {['Host Name', 'Module', 'Version', 'IP Address', 'Status', 'Last Heartbeat'].map(h => (
-                    <th key={h} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{h}</th>
+                  {['Sensor', 'Host', 'Version', 'Status', 'Events shipped', 'Last heartbeat'].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
-                {sensors.map(row => {
-                  const isUp = row.isConnected || row.state === 'RUNNING';
+                {sensors.map((row) => {
+                  const isUp = row.status === 'ONLINE';
                   return (
-                    <tr key={row.id} className="data-row-interactive hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 text-[12px] font-mono text-brand font-semibold">{row.hostName || row.id}</td>
-                      <td className="px-4 py-3 text-[11px] text-sev-medium">{row.moduleName}</td>
-                      <td className="px-4 py-3 text-[11px] text-text-muted font-mono">{row.currentVersion || '-'}</td>
-                      <td className="px-4 py-3 text-[12px] text-text-primary font-mono">{row.ipAddress || '-'}</td>
+                    <tr key={row.id} className="transition-colors hover:bg-bg-hover">
+                      <td className="px-4 py-3 text-[12px] font-mono font-semibold text-brand">{row.name || row.id}</td>
+                      <td className="px-4 py-3 text-[12px] text-text-secondary">{row.host || '—'}</td>
+                      <td className="px-4 py-3 text-[11px] font-mono text-text-muted">{row.version || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <StatusPulse variant={isUp ? 'online' : 'critical'} size="sm" />
-                          <span className="text-[11px] font-bold" style={{ color: isUp ? '#22C55E' : '#EF4444' }}>{isUp ? 'Up' : 'Down'}</span>
+                          <StatusPulse variant={isUp ? 'online' : row.status === 'DEGRADED' ? 'warning' : 'critical'} size="sm" />
+                          <span className="text-[11px] font-bold" style={{ color: isUp ? '#22C55E' : row.status === 'DEGRADED' ? '#F97316' : '#EF4444' }}>{row.status}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[11px] text-text-muted font-mono">{formatTs(row.lastHeartbeat)}</td>
+                      <td className="px-4 py-3 text-[11px] font-mono tabular-nums text-text-secondary">{row.lines_shipped.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-[11px] font-mono text-text-muted">{formatTs(row.last_heartbeat)}</td>
                     </tr>
                   );
                 })}
-                {sensors.length === 0 && !isLoading && (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-xs text-text-muted">No sensors found.</td></tr>
-                )}
               </tbody>
             </table>
           </div>

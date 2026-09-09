@@ -33,7 +33,14 @@ async def test_sensor_register_hashes_key_at_rest_and_returns_safe_urls(client, 
 
 
 @pytest.mark.asyncio
-async def test_sensor_heartbeat_accepts_header_key_without_url_secret(client, db_session):
+async def test_sensor_heartbeat_accepts_header_key_without_url_secret(client, db_session, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    # The heartbeat route schedules a stale-sensor sweep on the global
+    # AsyncSessionLocal; bind it to the test engine so it sees the schema.
+    session_factory = async_sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    monkeypatch.setattr("server.api.routers.sensors.AsyncSessionLocal", session_factory)
+
     raw_key = "raw-sensor-heartbeat-key"
     sensor = Sensor(
         id="sensor-header-heartbeat",

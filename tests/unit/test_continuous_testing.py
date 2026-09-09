@@ -70,11 +70,17 @@ async def test_sweep_continues_when_one_account_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_trigger_continuous_discovery_scan_noop_without_untested(db, monkeypatch):
+async def test_trigger_continuous_discovery_scan_noop_without_untested(test_engine, monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
     from server.config import settings
     from server.modules.scheduler.test_scheduler import TestScheduler
 
     monkeypatch.setattr(settings, "CONTINUOUS_TESTING_ENABLED", True)
+    session_factory = async_sessionmaker(bind=test_engine, expire_on_commit=False)
+    monkeypatch.setattr(
+        "server.modules.scheduler.test_scheduler.AsyncSessionLocal", session_factory
+    )
     # No endpoints in the DB -> nothing to scan.
     scheduler = TestScheduler()
     result = await scheduler.trigger_continuous_discovery_scan(account_id=999999111)

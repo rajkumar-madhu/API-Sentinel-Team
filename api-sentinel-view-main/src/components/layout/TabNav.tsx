@@ -50,14 +50,16 @@ export const TabNav: React.FC<TabNavProps> = ({ tabs, activeTab, onChange }) => 
   }, [tabSignature, updateIndicator]);
 
   return (
-    <div ref={containerRef} className="relative flex min-w-0 gap-1 overflow-x-auto px-6 no-scrollbar">
+    <div ref={containerRef} role="tablist" className="relative flex min-w-0 gap-1 overflow-x-auto px-6 no-scrollbar">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           data-tab-key={tab.key}
+          role="tab"
+          aria-selected={activeTab === tab.key}
           onClick={() => onChange(tab.key)}
           className={clsx(
-            'relative flex shrink-0 cursor-pointer items-center gap-1.5 px-3 py-3 text-sm font-medium outline-none transition-colors whitespace-nowrap',
+            'relative flex shrink-0 cursor-pointer items-center gap-1.5 px-3 py-3 text-sm font-medium outline-none transition-colors whitespace-nowrap focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-surface',
             activeTab === tab.key
               ? 'text-brand'
               : 'text-text-muted hover:text-text-secondary'
