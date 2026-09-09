@@ -750,8 +750,12 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
       <div class="ledger-val">Two side effects, both benign. The single-replica topology produced a <strong>~20 second ingest gap</strong> during the rollout — the sensor logged two flush failures at 16:50 and recovered unprompted. That is gap G-09 manifesting exactly as predicted, and it is the concrete argument for the HA work in P1. Separately, each anonymous request logs a confusing <code>JWT decode error: Not enough segments</code> warning; the 401 is correct, the log line is noise worth tidying.</div>
     </div>
     <div class="ledger-row">
-      <div class="ledger-key" style="color:var(--crit)">Blocked</div>
-      <div class="ledger-val"><strong>Git push — and this is what caused the 13-day regression.</strong> All five commits sit on local branch <code>security/anomalies-authz</code>, cut from the active console-ui tip. <code>origin</code> rejects the current credentials (it belongs to a different account) and a push to <code>fork</code> was denied by the environment's permission classifier, twice. Until someone pushes this branch and merges it, the next rebuild from <code>fix/p0-auth-and-console-ui</code> will drop the fix again exactly as it did on 2026-08-27.</div>
+      <div class="ledger-key" style="color:var(--ok)">Root cause closed</div>
+      <div class="ledger-val">The regression had a cause worth more than the bug it hid: <strong>production images were being built from uncommitted working-tree state</strong>. No branch tip matched any deployed tag — <code>20260827-console-ui</code> and <code>20260828-livefeed-appname</code> were built from 32 files that existed in no commit, including an untracked migration. That is why a committed fix could not survive a rebuild, and why no deploy was reproducible. Those files are now committed on <code>fix/p0-auth-and-console-ui</code>, the fix and the gate sit on top of them, and both images are built from that commit.</div>
+    </div>
+    <div class="ledger-row">
+      <div class="ledger-key" style="color:var(--high)">Blocked</div>
+      <div class="ledger-val"><strong>Git push only.</strong> Everything is committed locally but not pushed: <code>origin</code> rejects the current credentials (it belongs to a different account) and pushes to <code>fork</code> were denied by the environment's permission classifier. Production matches the local branch, but none of it is backed up off this machine yet.</div>
     </div>
     <div class="ledger-row">
       <div class="ledger-key" style="color:var(--ink-faint)">Not implemented</div>
@@ -760,11 +764,12 @@ hr.end{border:none;border-top:2px solid var(--ink);margin:76px 0 0}
   </div>
 
   <h3>Immediate next step</h3>
-  <p>The live hole is closed again. It will not stay closed on its own. Push <code>security/anomalies-authz</code> and merge it into <code>fix/p0-auth-and-console-ui</code>:</p>
+  <p>The hole is closed and, this time, closed durably: the fix lives on the branch production is built from, and the CI gate means a rebuild that loses it fails the security job instead of shipping quietly. The full stack was rebuilt from that commit and deployed as <code>20260909-authz-console</code>.</p>
+  <p>One thing remains, and it is the only thing standing between this state and safety:</p>
   <div class="tbl-wrap" style="background:var(--surface-2);border-color:var(--rule-strong)">
-    <table style="min-width:0"><tbody><tr><td style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);border:none;white-space:pre-wrap">git -C .claude/worktrees/sentinel-audit-p0 push -u fork security/anomalies-authz</td></tr></tbody></table>
+    <table style="min-width:0"><tbody><tr><td style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink);border:none;white-space:pre-wrap">git push fork fix/p0-auth-and-console-ui</td></tr></tbody></table>
   </div>
-  <p>Once it is merged, the CI gate in that branch means this specific regression cannot recur silently — a rebuild from a branch missing the fix would fail the security job rather than quietly shipping.</p>
+  <p>Until that runs, a month of console, ingest and inventory work plus this security fix exist on one machine and nowhere else.</p>
 </section>
 
 <hr class="end">
