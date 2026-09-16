@@ -48,6 +48,18 @@ pytest tests/ -k "tenancy" -v                                     # by keyword
 Most backend tests need `DEBUG=true` (production validation in `server/config.py` otherwise refuses
 to construct `Settings`). CI sets it explicitly on every backend job.
 
+`tests/conftest.py` supplies the fixtures nearly every backend test builds on — `test_engine` /
+`db_session` (in-memory SQLite via `Base.metadata.create_all`), `client` (httpx `AsyncClient` over
+the real ASGI app with `get_db`/`get_read_db` overridden), and `auth_headers` (an ADMIN JWT for
+`account_id` **1000000**, also exposed as the `account_id` fixture). Two autouse fixtures reset the
+rate limiter around every test and force `PENTEST_ALLOW_PRIVATE_TARGETS`. Use these rather than
+standing up your own engine or app instance.
+
+Three integration-flavoured files sit directly in `tests/` — `test_rls_integration.py`,
+`test_input_validator_integration.py`, `test_tier2_enforcement_integration.py` — and **no `make`
+target picks them up** (every target names a subdirectory). Run them by path when touching RLS,
+input validation, or tier-2 enforcement.
+
 ### Frontend (from `api-sentinel-view-main/`)
 
 ```bash
@@ -56,14 +68,17 @@ npm run dev            # Vite on :8080, proxies /api and WS to 127.0.0.1:8000
 npm run lint           # ESLint — a CI gate, run before any UI change lands
 npm test               # vitest run
 npm test -- src/services/discovery.service.test.ts   # single vitest file
+npm run test:watch     # vitest in watch mode
 npm run test:e2e       # Playwright; boots its own backend + frontend
+npm run test:e2e:headed
 npm run build
 ```
 
-Playwright's `webServer` starts a **throwaway backend** on `:18000` with a SQLite DB
-(`e2e_api_security.db`), `STARTUP_BOOTSTRAP_SCHEMA=true` and every background processor disabled —
-override ports with `E2E_BACKEND_PORT` / `E2E_FRONTEND_PORT`, or reuse running servers with
-`E2E_REUSE_EXISTING_SERVER=true`.
+Playwright's `webServer` starts a **throwaway backend** on `:18000` and its own Vite on `:5173`
+(*not* the `:8080` dev server), with a SQLite DB (`e2e_api_security.db`),
+`STARTUP_BOOTSTRAP_SCHEMA=true` and every background processor disabled — override ports with
+`E2E_BACKEND_PORT` / `E2E_FRONTEND_PORT`, or reuse running servers with
+`E2E_REUSE_EXISTING_SERVER=true` (ignored under `CI`).
 
 ### Docker / Kubernetes
 
@@ -160,9 +175,12 @@ enforcement. Scoring weights (`DETECTION_*_WEIGHT`) are config, not code.
 
 Active scanning is guarded by `TargetGuard` (allowlist + private-IP and DNS-rebinding checks),
 required auth profiles, per-mode concurrency caps (safe/balanced/aggressive), and worker isolation.
-`DEBUG=true` alone does **not** fail open on private targets — tests and Playwright explicitly set
-`PENTEST_ALLOW_PRIVATE_TARGETS=true` plus `PENTEST_TARGET_ALLOWLIST=127.0.0.1,localhost`. Keep that
-explicit when adding scan tests.
+`DEBUG=true` alone does **not** fail open on private targets — `TargetGuard.from_settings` stopped
+treating it as permission. The pytest suite gets `PENTEST_ALLOW_PRIVATE_TARGETS=true` from an autouse
+fixture in `tests/conftest.py`, which **deliberately leaves the allowlist wide** (many tests target
+public example hosts) — don't narrow it there. Playwright's backend sets the flag plus
+`PENTEST_TARGET_ALLOWLIST=127.0.0.1,localhost` in its own env. Keep both explicit when adding scan
+coverage.
 
 ### Frontend
 
