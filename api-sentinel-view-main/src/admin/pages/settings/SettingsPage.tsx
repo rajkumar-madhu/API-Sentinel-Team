@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, Key, Shield, Radio, FileText, ShieldAlert, ClipboardList, CheckSquare, Settings } from 'lucide-react';
+import { LayoutGrid, Users, Key, Shield, Radio, FileText, ShieldAlert, ClipboardList, CheckSquare, Settings, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SettingsCard from '@/components/shared/SettingsCard';
 
@@ -34,6 +34,7 @@ const SettingsPage: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <SettingsCard icon={Radio} title="Controller & Sensor Config" description="Configure and manage controller and sensor settings." onClick={() => navigate('/admin/system-health')} />
           <SettingsCard icon={FileText} title="License Usage" description="Monitor license consumption and track active usage." onClick={() => navigate('/admin/settings/license')} />
+          <SettingsCard icon={Bell} title="Alert Destinations" description="Send findings to Slack, PagerDuty, webhooks, and your SIEM." onClick={() => navigate('/admin/settings/integrations')} />
         </div>
       </div>
 

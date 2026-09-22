@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from server.modules.persistence.database import get_db
 from server.modules.auth.rbac import RBAC
+from server.modules.billing.quota import enforce_user_quota
 from server.models.core import Account, User, APIEndpoint, Vulnerability, TestRun
 
 router = APIRouter()
@@ -158,6 +159,8 @@ async def invite_member(
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
+
+    await enforce_user_quota(db, account_id)
 
     user = User(
         account_id=account_id,

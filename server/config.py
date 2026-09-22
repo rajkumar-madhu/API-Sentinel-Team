@@ -248,7 +248,11 @@ class Settings(BaseSettings):
     RECON_DEFAULT_INTERVAL_SECONDS: int = 86400
 
     # ── Tenant Isolation (RLS) ───────────────────────────────────────
-    TENANT_RLS_ENABLED: bool = False
+    # Defaults on: database-level tenant isolation is the intended baseline.
+    # Safe on SQLite (apply_tenant_context no-ops when DATABASE_URL isn't
+    # postgres), and startup best-effort applies the RLS policies themselves
+    # on Postgres deployments — see lifespan() in server/api/main.py.
+    TENANT_RLS_ENABLED: bool = True
     TENANT_RLS_SETTING_NAME: str = "app.current_account_id"
 
     # ── CI/CD Webhooks ───────────────────────────────────────────────────
@@ -296,6 +300,15 @@ class Settings(BaseSettings):
     # ── Billing / Stripe ─────────────────────────────────────────────────
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    # Where the frontend lives, for Stripe Checkout success/cancel redirects.
+    BILLING_SUCCESS_URL: str = "http://localhost:8080/admin/settings/license?checkout=success"
+    BILLING_CANCEL_URL: str = "http://localhost:8080/admin/settings/license?checkout=cancelled"
+
+    # ── OAuth / SSO ──────────────────────────────────────────────────────
+    # Backend origin used to build OAuth/OIDC/SAML callback URLs
+    # (server/api/routers/oauth.py). Was referenced but never defined here —
+    # every deployment silently fell back to localhost until this was added.
+    OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000"
 
     # ── Agent Guard ──────────────────────────────────────────────────────
     AGENT_GUARD_ENABLED: bool = True

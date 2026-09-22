@@ -57,6 +57,7 @@ const AddApplication = lazy(() => import("./admin/pages/settings/AddApplication"
 const ApiKeysManagement = lazy(() => import("./admin/pages/settings/ApiKeysManagement"));
 const LicenseUsage = lazy(() => import("./admin/pages/settings/LicenseUsage"));
 const AttributeMapping = lazy(() => import("./admin/pages/settings/AttributeMapping"));
+const IntegrationsSettings = lazy(() => import("./admin/pages/settings/IntegrationsSettings"));
 const SystemHealthLayout = lazy(() => import("./admin/pages/system-health/SystemHealthLayout"));
 const ControllerHealth = lazy(() => import("./admin/pages/system-health/ControllerHealth"));
 const SensorHealth = lazy(() => import("./admin/pages/system-health/SensorHealth"));
@@ -148,6 +149,7 @@ const App = () => (
                     <Route path="/admin/settings/api-keys" element={<ApiKeysManagement />} />
                     <Route path="/admin/settings/license" element={<LicenseUsage />} />
                     <Route path="/admin/settings/attribute-mapping" element={<AttributeMapping />} />
+                    <Route path="/admin/settings/integrations" element={<IntegrationsSettings />} />
                     <Route path="/admin/system-health" element={<SystemHealthLayout />}>
                       <Route index element={<ControllerHealth />} />
                       <Route path="controllers" element={<ControllerHealth />} />

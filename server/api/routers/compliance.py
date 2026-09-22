@@ -13,14 +13,24 @@ _renderer = PDFRenderer()
 _mapper = ComplianceMapper()
 
 
+def _permissions_of(payload: dict) -> set:
+    # payload["_permissions"] (set in RBAC.require_auth) covers both fixed
+    # roles and per-account custom roles — see server/modules/auth/rbac.py.
+    # Falls back to the role-only lookup for a hand-built payload dict.
+    permissions = payload.get("_permissions")
+    if permissions is None:
+        permissions = get_role_permissions(payload.get("role", "VIEWER"))
+    return permissions
+
+
 async def require_compliance_report_read(payload: dict = Depends(RBAC.require_auth)) -> dict:
-    if Permission.COMPLIANCE_READ not in get_role_permissions(payload.get("role", "VIEWER")):
+    if Permission.COMPLIANCE_READ not in _permissions_of(payload):
         raise HTTPException(403, f"Permission '{Permission.COMPLIANCE_READ}' required")
     return payload
 
 
 async def require_compliance_report_export(payload: dict = Depends(RBAC.require_auth)) -> dict:
-    if Permission.COMPLIANCE_EXPORT not in get_role_permissions(payload.get("role", "VIEWER")):
+    if Permission.COMPLIANCE_EXPORT not in _permissions_of(payload):
         raise HTTPException(403, f"Permission '{Permission.COMPLIANCE_EXPORT}' required")
     return payload
 

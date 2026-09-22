@@ -14,7 +14,7 @@ from . import (
     # AppSentinel production routers
     blocklist, alerts, sensors, stream, ingestion, openapi_specs, evidence, business_logic, agentic,
     detection_meta, pentest,
-    lineage,
+    lineage, privacy, custom_roles,
 )
 
 try:
@@ -84,6 +84,8 @@ router.include_router(detection_meta.router, prefix="/detection")
 router.include_router(business_logic.router, prefix="/business-logic")
 router.include_router(agentic.router, prefix="/agentic")
 router.include_router(lineage.router, prefix="/lineage")
+router.include_router(privacy.router, prefix="/privacy")
+router.include_router(custom_roles.router, prefix="/custom-roles")
 
 if _ws_available:
     router.include_router(ws.router, prefix="/ws")

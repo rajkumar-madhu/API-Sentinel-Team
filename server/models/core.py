@@ -364,6 +364,25 @@ class User(Base):
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class CustomRole(Base):
+    """Per-account custom role — a named permission set beyond the fixed
+    VIEWER/AUDITOR/MEMBER/DEVELOPER/SECURITY_ENGINEER/ADMIN roles. Assigned to
+    a User by storing this role's `name` in User.role; RBAC.require_auth
+    resolves unrecognized role names against this table (see server/modules/auth/rbac.py).
+    """
+    __tablename__ = "custom_roles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=True)
+    permissions: Mapped[list] = mapped_column(JSON, default=list)
+    created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("account_id", "name", name="uq_custom_roles_account_name"),)
+
+
 class ApiToken(Base):
     """Long-lived tokens for CI/CD or integration access."""
     __tablename__ = "api_tokens"
@@ -963,7 +982,14 @@ class MCPEndpoint(Base):
 
 
 class OAuthProvider(Base):
-    """SSO / OAuth2 provider configuration."""
+    """SSO / OAuth2 provider configuration.
+
+    `config` holds provider-specific settings beyond client_id/client_secret:
+      - oidc: {"issuer": "https://idp.example.com"} (discovery document is
+        fetched from f"{issuer}/.well-known/openid-configuration")
+      - saml: {"idp_entity_id", "idp_sso_url", "idp_x509_cert",
+        "sp_entity_id" (optional, derived from OAUTH_REDIRECT_BASE_URL if unset)}
+    """
     __tablename__ = "oauth_providers"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     account_id: Mapped[int] = mapped_column(BigInteger, default=1000000)
@@ -973,6 +999,7 @@ class OAuthProvider(Base):
     scopes: Mapped[list] = mapped_column(JSON, default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     allowed_domains: Mapped[list] = mapped_column(JSON, default=list)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

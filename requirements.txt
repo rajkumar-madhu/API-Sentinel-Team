@@ -27,6 +27,13 @@ PyJWT==2.11.0
 bcrypt==4.0.1
 cryptography>=42,<46
 python-multipart==0.0.22
+stripe>=9,<12
+
+# SAML 2.0 SSO (server/modules/auth/oauth_saml.py). Requires the xmlsec1
+# system package (apt: xmlsec1 libxmlsec1-dev) to build; oauth_saml.py
+# degrades to a clear 501 at request time if it isn't installed, so it
+# doesn't block startup or non-SAML deployments.
+python3-saml==1.16.0
 
 numpy==2.4.3
 scikit-learn==1.4.2
