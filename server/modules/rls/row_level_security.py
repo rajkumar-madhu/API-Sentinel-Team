@@ -37,7 +37,7 @@ RLS_TENANT_TABLES = [
     "alerts", "ml_models", "ml_model_runs", "ml_model_evaluations",
     "feature_vectors", "actor_profiles", "actor_baselines",
     "detection_object_states", "business_logic_graphs",
-    "business_logic_violations", "sensors",
+    "business_logic_violations", "sensors", "custom_roles",
 ]
 
 # warm_export_cursors and jwt_revoked_tokens are intentionally excluded:

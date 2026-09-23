@@ -9,7 +9,7 @@ from sqlalchemy import select, update, and_
 from server.config import settings
 from server.modules.persistence.database import get_db, AsyncSessionLocal
 from server.modules.auth.rbac import RBAC, Permission, can_run_tests
-from server.modules.billing.quota import enforce_scan_quota, increment_scan_usage
+from server.modules.billing.quota import reserve_scan_usage
 from server.modules.validation.input_validator import InputValidator, ValidationError
 from server.modules.test_executor.wordlist_manager import WordlistManager
 from server.modules.test_executor.execution_engine import ExecutionEngine
@@ -1918,7 +1918,6 @@ async def run_scan(
     account_id = payload["account_id"]
     if kill_switch_enabled():
         raise HTTPException(status_code=503, detail=KILL_SWITCH_REASON)
-    await enforce_scan_quota(db, account_id)
     _validate_scan_budget(template_ids, endpoint_ids)
 
     # Verify all endpoint_ids belong to this account
@@ -2010,7 +2009,7 @@ async def run_scan(
         },
         ip_address=_request_ip(request),
     )
-    await increment_scan_usage(db, account_id)
+    await reserve_scan_usage(db, account_id)
     await db.commit()
     if execution_mode == "background":
         background_tasks.add_task(

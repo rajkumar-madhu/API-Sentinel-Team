@@ -63,22 +63,32 @@ async def enforce_user_quota(db: AsyncSession, account_id: int) -> None:
         )
 
 
-async def enforce_scan_quota(db: AsyncSession, account_id: int) -> None:
-    subscription, plan = await _active_plan(db, account_id)
+async def reserve_scan_usage(db: AsyncSession, account_id: int) -> None:
+    """Atomically check-and-increment the monthly scan counter.
+
+    A separate read-then-write (check scans_used_this_month, then a later
+    unconditional +1) leaves a window where concurrent scan requests can all
+    read the same pre-increment count, all pass, and collectively exceed
+    max_scans_per_month. Folding the check into the UPDATE's WHERE clause
+    closes that window: the database evaluates the condition against the
+    row's current value as part of the same atomic statement, so at most
+    one of a set of racing requests can claim the last unit of quota.
+    """
+    _, plan = await _active_plan(db, account_id)
     if plan is None or plan.max_scans_per_month == UNLIMITED:
         return
-    if subscription.scans_used_this_month >= plan.max_scans_per_month:
+    result = await db.execute(
+        update(BillingSubscription)
+        .where(
+            BillingSubscription.account_id == account_id,
+            BillingSubscription.status == "ACTIVE",
+            BillingSubscription.scans_used_this_month < plan.max_scans_per_month,
+        )
+        .values(scans_used_this_month=BillingSubscription.scans_used_this_month + 1)
+    )
+    if result.rowcount == 0:
         raise HTTPException(
             402,
             f"Monthly scan limit reached ({plan.max_scans_per_month}) for plan '{plan.name}'. "
             "Upgrade or wait for the next billing period.",
         )
-
-
-async def increment_scan_usage(db: AsyncSession, account_id: int) -> None:
-    """Best-effort — an account with no active subscription matches zero rows and no-ops."""
-    await db.execute(
-        update(BillingSubscription)
-        .where(BillingSubscription.account_id == account_id, BillingSubscription.status == "ACTIVE")
-        .values(scans_used_this_month=BillingSubscription.scans_used_this_month + 1)
-    )

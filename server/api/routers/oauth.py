@@ -102,19 +102,39 @@ def _make_oidc(provider: OAuthProvider) -> GenericOIDC:
 
 
 async def _upsert_sso_user(db: AsyncSession, account_id: int, email: str, default_role: str = "MEMBER") -> User:
-    result = await db.execute(select(User).where(User.email == email))
+    """Find-or-create the SSO user *within this tenant only*.
+
+    User.email is globally unique, so a naive email-only lookup here would
+    let an IdP login for tenant B silently reuse an existing user row that
+    actually belongs to tenant A — issuing a JWT with account_id=B against a
+    user record that lives under account A. Scope the lookup to this
+    account_id, and reject (rather than cross-link) when the email is
+    already taken by a different tenant.
+    """
+    result = await db.execute(
+        select(User).where(User.account_id == account_id, User.email == email)
+    )
     user = result.scalar_one_or_none()
-    if not user:
-        user = User(
-            id=str(uuid.uuid4()),
-            account_id=account_id,
-            email=email,
-            password_hash="sso",
-            role=default_role,
+    if user:
+        return user
+
+    existing_elsewhere = await db.execute(select(User).where(User.email == email))
+    if existing_elsewhere.scalar_one_or_none():
+        raise HTTPException(
+            409,
+            f"Email '{email}' is already registered under a different account",
         )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
+
+    user = User(
+        id=str(uuid.uuid4()),
+        account_id=account_id,
+        email=email,
+        password_hash="sso",
+        role=default_role,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 

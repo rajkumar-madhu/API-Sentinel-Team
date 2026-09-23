@@ -217,12 +217,37 @@ async def stripe_webhook(
     # ── checkout.session.completed ────────────────────────────────────────────
     if event_type == "checkout.session.completed":
         client_ref = data_obj.get("client_reference_id")  # account_id passed at checkout
+        metadata = data_obj.get("metadata") or {}
         if client_ref and stripe_sub_id:
-            await db.execute(
+            account_id = int(client_ref)
+            now = datetime.now(timezone.utc)
+            result = await db.execute(
                 update(BillingSubscription)
-                .where(BillingSubscription.account_id == int(client_ref))
+                .where(BillingSubscription.account_id == account_id)
                 .values(status="ACTIVE", stripe_subscription_id=stripe_sub_id)
             )
+            if result.rowcount == 0:
+                # First-ever checkout for this account: create_checkout_session()
+                # doesn't pre-create a subscription row, so there's nothing for
+                # the UPDATE above to match — insert one instead of silently
+                # leaving a paying account with no subscription record.
+                plan_id = metadata.get("plan_id")
+                if plan_id:
+                    db.add(BillingSubscription(
+                        id=str(uuid.uuid4()),
+                        account_id=account_id,
+                        plan_id=plan_id,
+                        status="ACTIVE",
+                        stripe_subscription_id=stripe_sub_id,
+                        current_period_start=now,
+                        current_period_end=now + timedelta(days=30),
+                    ))
+                else:
+                    logger.error(
+                        "Stripe checkout completed for account %s with no existing "
+                        "subscription and no plan_id in metadata — cannot create one",
+                        client_ref,
+                    )
             await db.commit()
             logger.info("Stripe checkout completed for account %s", client_ref)
 
