@@ -13,6 +13,7 @@ import RootRedirect from "@/components/auth/RootRedirect";
 import LegacyRouteRedirect from "@/components/routing/LegacyRouteRedirect";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
+const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const AccessRestricted = lazy(() => import("./pages/AccessRestricted"));
@@ -95,6 +96,7 @@ const App = () => (
               <Suspense fallback={<AppShellFallback />}>
                 <Routes>
                   <Route path="/" element={<RootRedirect />} />
+                  <Route path="/welcome" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/access-restricted" element={<AccessRestricted />} />
 

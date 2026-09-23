@@ -1,6 +1,6 @@
 # API Sentinel / API Security Engine — Project Memory
 
-Last reviewed: 2026-08-15  
+Last reviewed: 2026-09-22  
 Purpose: persistent context for humans and agents working in this repository.  
 Full E2E guide: [`docs/PROJECT_END_TO_END.md`](docs/PROJECT_END_TO_END.md)
 
@@ -48,6 +48,19 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 
 **Recent commits:** OpenAPI drift processor + Schema Validation UI + fan-out caps; Evidence UI polish on main.
 
+**B2B/enterprise-readiness pass (2026-09-22):**
+
+1. Postgres RLS on by default (`TENANT_RLS_ENABLED=True`); policy coverage expanded from 4 hardcoded tables to all ~68 `account_id`-scoped tables (`server/modules/rls/row_level_security.py`, generated + idempotent), applied automatically at startup for Postgres deployments.
+2. Generic OIDC and SAML 2.0 SSO added alongside the existing GitHub-only OAuth (`server/modules/auth/oauth_oidc.py`, `oauth_saml.py`; `python3-saml` dependency), configurable per tenant via `OAuthProvider.config`.
+3. Custom RBAC roles: `CustomRole` model + `/api/custom-roles` CRUD, resolved by `RBAC.require_auth` alongside the fixed roles.
+4. Billing: Stripe Checkout session creation (`POST /api/billing/checkout/{account_id}`) and quota enforcement (`server/modules/billing/quota.py`) against plan limits at write time; fixed a cross-tenant authorization bug in the billing router.
+5. Compliance reports now cover all 7 frameworks (OWASP/GDPR/HIPAA/PCI/SOC2/NIST/EU AI Act) via `ComplianceMapper` instead of an incomplete duplicate table.
+6. DSAR endpoints (`server/api/routers/privacy.py`): self-service and admin-driven data export/erasure.
+7. Customer-facing integrations settings UI (`api-sentinel-view-main/src/admin/pages/settings/IntegrationsSettings.tsx`) — the backend Slack/webhook/PagerDuty/SIEM API already existed and just had no frontend.
+8. Public marketing landing page at `/welcome` (`src/pages/Landing.tsx`) linking into the existing `/login` page's sign-up/sign-in toggle (now also supports `?mode=signup` to open directly in signup mode). Self-serve signup itself (`POST /api/auth/signup`) already existed on both backend and `/login` — it just had no public entry point before `/welcome`.
+
+See `rajkumar-madhu/API-Sentinel-Team#2` for the full diff.
+
 ---
 
 ## Repository layout (high level)
@@ -77,7 +90,7 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 - **Migrations:** Alembic (`migrations/`); keep `alembic.ini` for Docker builds  
 - **Cache / queue:** Redis (optional)  
 - **Streaming:** Kafka + `aiokafka`; optional Flink when `STREAM_ENGINE=FLINK`  
-- **Auth:** JWT, bcrypt, API keys, sensor keys (HMAC), optional tenant RLS  
+- **Auth:** JWT, bcrypt, API keys, sensor keys (HMAC); tenant RLS on by default on Postgres. SSO: GitHub OAuth, generic OIDC, SAML 2.0 (`server/modules/auth/oauth_*.py`), plus per-account custom RBAC roles (`server/api/routers/custom_roles.py`)  
 - **Rate limiting:** `slowapi` + AdaptiveRequestGuard  
 - **Scheduling:** APScheduler components  
 - **Logging:** `structlog`  
@@ -122,6 +135,7 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 - **Vite 5**, **React 18**, **TypeScript**, Tailwind, Radix/shadcn  
 - **Data:** TanStack React Query (zustand listed but unused)  
 - **Workspaces:** `/app` (customer), `/admin` (org admin), `/platform` (PLATFORM_ADMIN)  
+- **Public routes:** `/welcome` (marketing landing), `/login` (sign-in + self-serve sign-up toggle, `?mode=signup` opens signup mode directly)  
 - **Auth:** cookie session + optional in-memory Bearer; `GET /api/auth/me` bootstrap  
 - **Pattern:** pages → hooks → services → `lib/api-client.ts`  
 - **Realtime:** `lib/realtime.ts` → `/api/stream/live` invalidates query namespaces  
@@ -164,7 +178,7 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 
 - Production secrets: `JWT_SECRET`, `API_KEY`, `ENCRYPTION_KEY`, `SENSOR_KEY_HASH_PEPPER`, CI gate signing  
 - Demo users only with DEBUG + bootstrap flags  
-- Multi-tenant: `account_id` + optional RLS  
+- Multi-tenant: `account_id` filter on every query + Postgres RLS (`TENANT_RLS_ENABLED`, on by default; no-op on SQLite)  
 - Pentest: allowlist, target_guard, auth profile scopes, worker isolation  
 - Do not commit `.env`, cookies, or generated DBs  
 
