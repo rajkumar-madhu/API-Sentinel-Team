@@ -66,16 +66,17 @@ event.listen(Session, "before_flush", _validate_account_scoped_models)
 
 async def get_db():
     async with AsyncSessionLocal() as session:
-        await apply_tenant_context(session)
         yield session
 
 async def get_read_db():
     async with ReadOnlySessionLocal() as session:
-        await apply_tenant_context(session)
         yield session
 
 
 async def apply_tenant_context(session) -> None:
+    """Explicit entry point for callers that manage their own session outside
+    a request (background workers) and know account_id is already set in the
+    tenancy ContextVar by the time they call this."""
     if not settings.TENANT_RLS_ENABLED:
         return
     if "postgres" not in settings.DATABASE_URL:
@@ -87,3 +88,34 @@ async def apply_tenant_context(session) -> None:
         text(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME} = :account_id"),
         {"account_id": str(account_id)},
     )
+
+
+def _apply_tenant_context_on_begin(session: Session, transaction, connection) -> None:
+    """Request-path RLS enforcement, fired at first-statement/transaction-begin
+    time rather than at session-creation time.
+
+    get_db()/get_read_db() run as FastAPI dependencies, which are commonly
+    resolved *before* RBAC.require_auth has determined the caller's
+    account_id (dependency order isn't guaranteed, and get_db is frequently
+    declared before the auth dependency) — calling apply_tenant_context()
+    there was a no-op nearly every request, silently leaving RLS-protected
+    sessions with no tenant context set. `after_begin` instead fires when
+    the first query actually runs, which is always after every dependency —
+    including auth — has resolved, so get_current_account_id() is reliably
+    populated by then. See the same idempotent SET LOCAL logic as
+    apply_tenant_context() above.
+    """
+    if not settings.TENANT_RLS_ENABLED:
+        return
+    if "postgres" not in settings.DATABASE_URL:
+        return
+    account_id = get_current_account_id()
+    if account_id is None:
+        return
+    connection.execute(
+        text(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME} = :account_id"),
+        {"account_id": str(account_id)},
+    )
+
+
+event.listen(Session, "after_begin", _apply_tenant_context_on_begin)

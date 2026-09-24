@@ -9,6 +9,7 @@ from sqlalchemy import select, update, and_
 from server.config import settings
 from server.modules.persistence.database import get_db, AsyncSessionLocal
 from server.modules.auth.rbac import RBAC, Permission, can_run_tests
+from server.modules.billing.quota import reserve_scan_usage
 from server.modules.validation.input_validator import InputValidator, ValidationError
 from server.modules.test_executor.wordlist_manager import WordlistManager
 from server.modules.test_executor.execution_engine import ExecutionEngine
@@ -2008,6 +2009,7 @@ async def run_scan(
         },
         ip_address=_request_ip(request),
     )
+    await reserve_scan_usage(db, account_id)
     await db.commit()
     if execution_mode == "background":
         background_tasks.add_task(

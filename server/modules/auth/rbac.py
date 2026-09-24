@@ -5,6 +5,8 @@ Roles: ADMIN > SECURITY_ENGINEER > DEVELOPER > MEMBER > AUDITOR > VIEWER
 from typing import List, Callable, Optional, Set
 from fastapi import HTTPException, Depends, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from .jwt_issuer import JWTIssuer, TokenRevokedError
 from server.modules.tenancy.context import set_current_account_id
 import logging
@@ -108,6 +110,26 @@ def get_role_permissions(role: str) -> Set[str]:
     return ROLE_PERMISSIONS.get(role.upper(), ROLE_PERMISSIONS["VIEWER"])
 
 
+async def _resolve_custom_role_permissions(account_id: int, role_name: str) -> Set[str]:
+    """Look up a per-account custom role (server/api/routers/custom_roles.py) for
+    a role name that isn't one of the fixed ROLE_PERMISSIONS keys. Returns an
+    empty set (deny-by-default) if no such role exists."""
+    from server.modules.persistence.database import AsyncSessionLocal
+    from server.models.core import CustomRole
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(CustomRole).where(
+                CustomRole.account_id == account_id,
+                CustomRole.name == role_name,
+            )
+        )
+        custom_role = result.scalar_one_or_none()
+        if not custom_role or not custom_role.permissions:
+            return set()
+        return {p for p in custom_role.permissions if p in _ALL}
+
+
 class RBAC:
     @staticmethod
     async def require_auth(request: Request, token: Optional[HTTPAuthorizationCredentials] = Security(auth_scheme)) -> dict:
@@ -118,20 +140,27 @@ class RBAC:
             token_str = request.headers.get("authorization", "").split(" ", 1)[1].strip()
         elif "access_token" in request.cookies:
             token_str = request.cookies["access_token"]
-            
+
         if not token_str:
             raise HTTPException(401, "Authorization header or cookie missing")
-            
+
         try:
             payload = await JWTIssuer.verify_token(token_str)
         except TokenRevokedError:
             raise HTTPException(401, "Token has been revoked. Please log in again.")
         except Exception as e:
             raise HTTPException(401, f"Invalid or expired token: {str(e)}")
-            
+
         if not payload.get("user_id") and payload.get("sub"):
             payload["user_id"] = payload.get("sub")
-        payload["_permissions"] = get_role_permissions(payload.get("role", "VIEWER"))
+        role = payload.get("role", "VIEWER")
+        if role.upper() in ROLE_PERMISSIONS:
+            payload["_permissions"] = get_role_permissions(role)
+        else:
+            # Not one of the fixed roles — resolve against this account's custom roles.
+            payload["_permissions"] = await _resolve_custom_role_permissions(
+                payload.get("account_id"), role
+            )
         set_current_account_id(payload.get("account_id"))
         return payload
 
@@ -149,7 +178,14 @@ class RBAC:
     @staticmethod
     def require_permission(permission: str) -> Callable:
         async def dependency(payload: dict = Depends(RBAC.require_auth)):
-            if permission not in get_role_permissions(payload.get("role", "VIEWER")):
+            # payload["_permissions"] was resolved in require_auth — for a fixed
+            # role from ROLE_PERMISSIONS, or for a per-account custom role. Falls
+            # back to the role-only lookup if a caller built payload by hand
+            # (bypassing require_auth) without setting _permissions.
+            permissions = payload.get("_permissions")
+            if permissions is None:
+                permissions = get_role_permissions(payload.get("role", "VIEWER"))
+            if permission not in permissions:
                 raise HTTPException(403, f"Permission '{permission}' required")
             return payload
         return dependency

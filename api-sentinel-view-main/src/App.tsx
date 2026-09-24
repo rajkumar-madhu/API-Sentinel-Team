@@ -13,6 +13,7 @@ import RootRedirect from "@/components/auth/RootRedirect";
 import LegacyRouteRedirect from "@/components/routing/LegacyRouteRedirect";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
+const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const AccessRestricted = lazy(() => import("./pages/AccessRestricted"));
@@ -57,6 +58,7 @@ const AddApplication = lazy(() => import("./admin/pages/settings/AddApplication"
 const ApiKeysManagement = lazy(() => import("./admin/pages/settings/ApiKeysManagement"));
 const LicenseUsage = lazy(() => import("./admin/pages/settings/LicenseUsage"));
 const AttributeMapping = lazy(() => import("./admin/pages/settings/AttributeMapping"));
+const IntegrationsSettings = lazy(() => import("./admin/pages/settings/IntegrationsSettings"));
 const SystemHealthLayout = lazy(() => import("./admin/pages/system-health/SystemHealthLayout"));
 const ControllerHealth = lazy(() => import("./admin/pages/system-health/ControllerHealth"));
 const SensorHealth = lazy(() => import("./admin/pages/system-health/SensorHealth"));
@@ -94,6 +96,7 @@ const App = () => (
               <Suspense fallback={<AppShellFallback />}>
                 <Routes>
                   <Route path="/" element={<RootRedirect />} />
+                  <Route path="/welcome" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/access-restricted" element={<AccessRestricted />} />
 
@@ -148,6 +151,7 @@ const App = () => (
                     <Route path="/admin/settings/api-keys" element={<ApiKeysManagement />} />
                     <Route path="/admin/settings/license" element={<LicenseUsage />} />
                     <Route path="/admin/settings/attribute-mapping" element={<AttributeMapping />} />
+                    <Route path="/admin/settings/integrations" element={<IntegrationsSettings />} />
                     <Route path="/admin/system-health" element={<SystemHealthLayout />}>
                       <Route index element={<ControllerHealth />} />
                       <Route path="controllers" element={<ControllerHealth />} />

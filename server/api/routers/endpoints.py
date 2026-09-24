@@ -10,6 +10,7 @@ from server.modules.validation.input_validator import InputValidator, Validation
 from server.api.rate_limiter import limiter
 from server.modules.cache.redis_cache import get_cache_version, get_json, set_json, bump_cache_version
 from server.modules.api_inventory.lineage import EndpointLineageService
+from server.modules.billing.quota import enforce_endpoint_quota
 from server.config import settings
 
 router = APIRouter()
@@ -222,6 +223,7 @@ async def create_endpoint(
     user: dict = Depends(RBAC.require_permission(Permission.ENDPOINTS_WRITE)),
 ):
     account_id = user["account_id"]
+    await enforce_endpoint_quota(db, account_id)
     ep = APIEndpoint(
         id=str(uuid.uuid4()),
         account_id=account_id,

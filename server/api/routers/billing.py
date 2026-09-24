@@ -16,6 +16,22 @@ from server.modules.auth.rbac import RBAC, require_admin
 router = APIRouter(tags=["Billing"])
 logger = logging.getLogger(__name__)
 
+def _require_account_access(payload: dict, account_id: int) -> None:
+    """Allow PLATFORM_ADMIN or ADMIN of the target account; else 403.
+
+    Mirrors organization.py's `_require_account_access` — `require_admin`
+    alone only checks the caller's JWT role, not that account_id in the path
+    matches their own account, which would let an ADMIN of one tenant read
+    or modify another tenant's billing subscription.
+    """
+    role = (payload.get("role") or "").upper()
+    if role == "PLATFORM_ADMIN":
+        return
+    if role == "ADMIN" and int(payload.get("account_id") or 0) == int(account_id):
+        return
+    raise HTTPException(status_code=403, detail="Not authorized for this organization's billing")
+
+
 DEFAULT_PLANS = [
     {"name": "Free",       "tier": "FREE",       "max_endpoints": 50,   "max_users": 2,  "max_scans_per_month": 5,   "features": ["api_inventory","basic_tests"],                                              "price_monthly_usd": 0.0},
     {"name": "Starter",    "tier": "STARTER",    "max_endpoints": 500,  "max_users": 10, "max_scans_per_month": 50,  "features": ["api_inventory","basic_tests","compliance_reports","slack","jira"],          "price_monthly_usd": 49.0},
@@ -51,8 +67,7 @@ async def list_plans(payload: dict = Depends(RBAC.require_auth), db: AsyncSessio
 
 @router.get("/subscription/{account_id}")
 async def get_subscription(account_id: int, payload: dict = Depends(RBAC.require_auth), db: AsyncSession = Depends(get_db)):
-    if payload.get("role", "").upper() != "ADMIN" and payload.get("account_id") != account_id:
-        raise HTTPException(403, "Access denied to another account's subscription")
+    _require_account_access(payload, account_id)
     result = await db.execute(select(BillingSubscription).where(BillingSubscription.account_id == account_id))
     sub = result.scalar_one_or_none()
     if not sub:
@@ -65,9 +80,61 @@ async def get_subscription(account_id: int, payload: dict = Depends(RBAC.require
             "current_period_end": sub.current_period_end}
 
 
+@router.post("/checkout/{account_id}")
+async def create_checkout_session(
+    account_id: int,
+    plan_id: str = Body(..., embed=True),
+    payload: dict = Depends(RBAC.require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create a Stripe Checkout session for the given plan and return its URL.
+    The subscription itself is activated by the `checkout.session.completed`
+    webhook above once payment completes — this endpoint only starts checkout.
+    """
+    _require_account_access(payload, account_id)
+    from server.config import settings
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(501, "Billing is not configured (STRIPE_SECRET_KEY unset)")
+
+    plan_result = await db.execute(select(BillingPlan).where(BillingPlan.id == plan_id))
+    plan = plan_result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(404, "Plan not found")
+    if plan.price_monthly_usd <= 0:
+        raise HTTPException(400, f"Plan '{plan.name}' has no price — use /subscription/{account_id}/assign directly")
+
+    import stripe
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            client_reference_id=str(account_id),
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"API Sentinel — {plan.name}"},
+                    "unit_amount": int(plan.price_monthly_usd * 100),
+                    "recurring": {"interval": "month"},
+                },
+                "quantity": 1,
+            }],
+            success_url=settings.BILLING_SUCCESS_URL,
+            cancel_url=settings.BILLING_CANCEL_URL,
+            metadata={"account_id": str(account_id), "plan_id": plan_id},
+        )
+    except Exception as exc:
+        logger.error("Stripe checkout session creation failed: %s", exc)
+        raise HTTPException(502, f"Stripe checkout session creation failed: {exc}")
+
+    return {"checkout_url": session.url, "session_id": session.id}
+
+
 @router.post("/subscription/{account_id}/assign")
 async def assign_plan(account_id: int, plan_id: str = Body(..., embed=True),
-                      payload: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+                      payload: dict = Depends(RBAC.require_auth), db: AsyncSession = Depends(get_db)):
+    _require_account_access(payload, account_id)
     plan_result = await db.execute(select(BillingPlan).where(BillingPlan.id == plan_id))
     plan = plan_result.scalar_one_or_none()
     if not plan:
@@ -87,7 +154,8 @@ async def assign_plan(account_id: int, plan_id: str = Body(..., embed=True),
 
 
 @router.post("/subscription/{account_id}/cancel")
-async def cancel_subscription(account_id: int, payload: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def cancel_subscription(account_id: int, payload: dict = Depends(RBAC.require_auth), db: AsyncSession = Depends(get_db)):
+    _require_account_access(payload, account_id)
     await db.execute(update(BillingSubscription).where(BillingSubscription.account_id == account_id)
                      .values(status="CANCELLED"))
     await db.commit()
@@ -96,8 +164,7 @@ async def cancel_subscription(account_id: int, payload: dict = Depends(require_a
 
 @router.get("/usage/{account_id}")
 async def get_usage(account_id: int, payload: dict = Depends(RBAC.require_auth), db: AsyncSession = Depends(get_db)):
-    if payload.get("role", "").upper() != "ADMIN" and payload.get("account_id") != account_id:
-        raise HTTPException(403, "Access denied to another account's usage")
+    _require_account_access(payload, account_id)
     ep_count    = (await db.execute(select(func.count()).select_from(APIEndpoint).where(APIEndpoint.account_id == account_id))).scalar()
     user_count  = (await db.execute(select(func.count()).select_from(User).where(User.account_id == account_id))).scalar()
     scan_count  = (await db.execute(select(func.count()).select_from(TestRun).where(TestRun.account_id == account_id))).scalar()
@@ -150,12 +217,37 @@ async def stripe_webhook(
     # ── checkout.session.completed ────────────────────────────────────────────
     if event_type == "checkout.session.completed":
         client_ref = data_obj.get("client_reference_id")  # account_id passed at checkout
+        metadata = data_obj.get("metadata") or {}
         if client_ref and stripe_sub_id:
-            await db.execute(
+            account_id = int(client_ref)
+            now = datetime.now(timezone.utc)
+            result = await db.execute(
                 update(BillingSubscription)
-                .where(BillingSubscription.account_id == int(client_ref))
+                .where(BillingSubscription.account_id == account_id)
                 .values(status="ACTIVE", stripe_subscription_id=stripe_sub_id)
             )
+            if result.rowcount == 0:
+                # First-ever checkout for this account: create_checkout_session()
+                # doesn't pre-create a subscription row, so there's nothing for
+                # the UPDATE above to match — insert one instead of silently
+                # leaving a paying account with no subscription record.
+                plan_id = metadata.get("plan_id")
+                if plan_id:
+                    db.add(BillingSubscription(
+                        id=str(uuid.uuid4()),
+                        account_id=account_id,
+                        plan_id=plan_id,
+                        status="ACTIVE",
+                        stripe_subscription_id=stripe_sub_id,
+                        current_period_start=now,
+                        current_period_end=now + timedelta(days=30),
+                    ))
+                else:
+                    logger.error(
+                        "Stripe checkout completed for account %s with no existing "
+                        "subscription and no plan_id in metadata — cannot create one",
+                        client_ref,
+                    )
             await db.commit()
             logger.info("Stripe checkout completed for account %s", client_ref)
 

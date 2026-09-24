@@ -76,11 +76,15 @@ North-star product mandate: [`docs/API_PENTESTING_NORTH_STAR.md`](./API_PENTESTI
 
 | Concern | Mechanism |
 |---------|-----------|
-| Users | JWT (HS256) + optional `access_token` cookie; roles VIEWER→ADMIN + PLATFORM_ADMIN |
+| Users | JWT (HS256) + optional `access_token` cookie; roles VIEWER→ADMIN + PLATFORM_ADMIN, plus per-account custom roles |
+| SSO | GitHub OAuth, generic OIDC, SAML 2.0 — `server/modules/auth/oauth_{github,oidc,saml}.py`, configured per tenant via `OAuthProvider.config` (`server/api/routers/oauth.py`) |
+| Custom roles | `CustomRole` model + `/api/custom-roles` CRUD (`server/api/routers/custom_roles.py`); resolved in `RBAC.require_auth` for any role name not in the fixed set |
 | Sensors | `Authorization: Bearer <sensor_key>` / `X-Sensor-Key`; keys hashed at rest (`SENSOR_KEY_HASH_PEPPER`) |
 | Tenant key | `account_id` on almost every row |
-| Isolation | App filters + ContextVar + optional Postgres RLS (`TENANT_RLS_ENABLED`) |
+| Isolation | App filters + ContextVar + Postgres RLS (`TENANT_RLS_ENABLED`, **on by default**; no-op on non-Postgres `DATABASE_URL`). Policies cover ~68 tables (`server/modules/rls/row_level_security.py`) and are applied automatically at startup for Postgres deployments |
 | RBAC | `server/modules/auth/rbac.py` permission matrix |
+| Billing quotas | `server/modules/billing/quota.py` enforces `max_endpoints`/`max_users`/`max_scans_per_month` from the account's active `BillingSubscription`/`BillingPlan` at write time; no-ops for accounts with no active subscription |
+| DSAR | `server/api/routers/privacy.py` — self-service (`/api/privacy/export/me`) and admin-driven (`/api/privacy/export/{user_id}`, `/api/privacy/erase/{user_id}`) data export/erasure |
 
 Demo bootstrap only when `DEBUG` + `STARTUP_ENABLE_DEMO_BOOTSTRAP` — never enable in production.
 
@@ -128,7 +132,7 @@ JWT/cookie → set `account_id` → `/api/dashboard`, `/endpoints`, `/alerts`, `
 
 | Area | Routers |
 |------|---------|
-| Auth/org | `auth`, `oauth`, `organization`, `audit_logs`, `billing` |
+| Auth/org | `auth`, `oauth`, `organization`, `audit_logs`, `billing`, `custom_roles`, `privacy` |
 | Inventory | `endpoints`, `collections`, `openapi`, `lineage`, `governance`, `traffic` |
 | Runtime | `sensors`, `stream`, `ingestion`, `alerts`, `threat_actors`, `blocklist`, `enforcement`, `waf` |
 | Testing | `tests`, `suites`, `schedules`, `bola`, `pentest`, `nuclei`, `cicd` |
@@ -162,7 +166,7 @@ Vite 5, React 18, TypeScript, Tailwind + Radix/shadcn, TanStack Query, react-rou
 | `/admin/*` | Org admin / onboarding / sensors | ADMIN, SECURITY_ENGINEER |
 | `/platform/*` | Platform ops | PLATFORM_ADMIN only |
 
-Shell: `WorkspaceLayout` + `workspaces.ts`. Public: `/login`, `/access-restricted`. Legacy paths redirect into `/app` or `/admin`.
+Shell: `WorkspaceLayout` + `workspaces.ts`. Public: `/welcome` (marketing landing, `src/pages/Landing.tsx`), `/login` (sign-in + self-serve sign-up toggle — `?mode=signup` opens directly in signup mode, posts to `POST /api/auth/signup`), `/access-restricted`. Legacy paths redirect into `/app` or `/admin`. Unauthenticated visits to `/` still redirect straight to `/login` (`RootRedirect`) — `/welcome` is a separate, deliberately-linked entry point, not the default root.
 
 ### Data access pattern
 

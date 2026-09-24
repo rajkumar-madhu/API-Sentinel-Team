@@ -25,6 +25,7 @@ from server.modules.ingestion.queue import ingestion_queue
 from server.modules.persistence.database import AsyncSessionLocal, engine, get_db
 from server.modules.recon.scheduler import ReconScheduler
 from server.modules.response.default_playbooks import ensure_default_playbooks
+from server.modules.rls.row_level_security import enable_rls_on_all_tables
 from server.modules.scheduler.test_scheduler import TestScheduler
 from server.modules.scheduler.continuous_testing import ContinuousTestingProcessor
 from server.modules.scheduler.openapi_drift import OpenAPIDriftProcessor
@@ -204,6 +205,15 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.warning("startup_schema_bootstrap_enabled", database_url=settings.DATABASE_URL)
+
+    if settings.TENANT_RLS_ENABLED and "postgres" in settings.DATABASE_URL:
+        async with AsyncSessionLocal() as db:
+            rls_results = await enable_rls_on_all_tables(db)
+        failed_tables = [t for t, r in rls_results.items() if r.get("status") != "success"]
+        if failed_tables:
+            logger.error("startup_rls_setup_incomplete", failed_tables=failed_tables)
+        else:
+            logger.info("startup_rls_enabled", tables=len(rls_results))
 
     if settings.STARTUP_ENABLE_DEMO_BOOTSTRAP:
         await _seed_demo_bootstrap()

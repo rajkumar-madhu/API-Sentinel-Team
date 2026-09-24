@@ -10,7 +10,7 @@ data:
   APP_NAME: "API Security Engine"
   VERSION: "1.0.0"
   DEBUG: "false"
-  TENANT_RLS_ENABLED: "false"
+  TENANT_RLS_ENABLED: "true"
   TESTS_LIBRARY_PATH: "/app/tests-library"
   CORS_ORIGINS_OVERRIDE: "https://sentinel.wecrew.in"
   INGEST_EXCLUDE_HOSTS: "api-sentinel-backend,api-sentinel-backend.api-sentinel.svc.cluster.local,api-sentinel-frontend,api-sentinel-frontend.api-sentinel.svc.cluster.local"

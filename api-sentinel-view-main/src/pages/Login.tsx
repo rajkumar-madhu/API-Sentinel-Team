@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Loader2, Eye, EyeOff, Lock, Mail, ShieldCheck, Radar, FileSearch,
   Boxes, Activity, ScrollText, ChevronRight, BadgeCheck,
@@ -107,7 +107,8 @@ const Login: React.FC = () => {
   const [submitting, setSubmitting] = React.useState(false);
   const [localError, setLocalError] = React.useState<string | null>(null);
   const [shakeError, setShakeError] = React.useState(false);
-  const [isSignup, setIsSignup] = React.useState(false);
+  const [searchParams] = useSearchParams();
+  const [isSignup, setIsSignup] = React.useState(() => searchParams.get('mode') === 'signup');
   const [emailError, setEmailError] = React.useState<string | null>(null);
   const [passwordError, setPasswordError] = React.useState<string | null>(null);
   const { user, login, signup, error: authError } = useAuth();
