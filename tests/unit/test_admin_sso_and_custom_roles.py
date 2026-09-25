@@ -150,3 +150,54 @@ async def test_guest_is_reserved_role_name(client, auth_headers):
     )
 
     assert resp.status_code == 400
+
+
+async def test_oauth_provider_type_unique_per_account(db_session):
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    from server.models.core import OAuthProvider
+
+    db_session.add(OAuthProvider(id="p1", account_id=1000000, provider="oidc", config={}))
+    db_session.add(OAuthProvider(id="p2", account_id=1000000, provider="oidc", config={}))
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+
+
+async def test_concurrent_duplicate_provider_returns_409(client, auth_headers, db_session, monkeypatch):
+    """Simulate the race: the pre-check misses the row another request inserted."""
+    from server.models.core import OAuthProvider
+
+    db_session.add(OAuthProvider(id="raced", account_id=1000000, provider="oidc", config={"issuer": "https://a"}))
+    await db_session.commit()
+
+    original_scalar = db_session.scalar
+    calls = {"n": 0}
+
+    async def scalar_missing_duplicate(stmt, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return await original_scalar(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "scalar", scalar_missing_duplicate)
+    resp = await client.post(
+        "/api/oauth/providers",
+        json={"provider": "oidc", "config": {"issuer": "https://b"}},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 409
+
+
+async def test_saml_metadata_invalid_config_is_controlled_error(client, monkeypatch):
+    from server.api.routers import oauth as oauth_router
+
+    def broken(_settings):
+        raise ValueError("Invalid SP metadata: ['sp_entityId_not_found']")
+
+    monkeypatch.setattr(oauth_router, "sp_metadata_xml", broken)
+    resp = await client.get("/api/oauth/saml/1000000/metadata")
+
+    assert resp.status_code == 500
+    assert "sp_entityId_not_found" not in resp.text

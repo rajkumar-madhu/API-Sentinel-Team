@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.models.core import OAuthProvider, User
@@ -254,7 +255,12 @@ async def create_provider(
         config=config or {},
     )
     db.add(provider_row)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent request created the same provider type first.
+        await db.rollback()
+        raise HTTPException(409, f"A {provider} provider is already configured for this account")
     return {"id": provider_row.id, "provider": provider, "status": "created"}
 
 
@@ -513,6 +519,10 @@ async def saml_sp_metadata(account_id: int, db: AsyncSession = Depends(get_db)):
         xml = sp_metadata_xml(settings)
     except SAMLNotAvailableError as exc:
         raise HTTPException(501, str(exc))
+    except Exception:
+        # Invalid stored SAML config (e.g. a bad sp_entity_id); don't leak details on a public route.
+        logger.exception("SAML SP metadata generation failed for account %s", account_id)
+        raise HTTPException(500, "SAML SP metadata could not be generated; check the SAML provider configuration")
     return Response(content=xml, media_type="application/samlmetadata+xml")
 
 

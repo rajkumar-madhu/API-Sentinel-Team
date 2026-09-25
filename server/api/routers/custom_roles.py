@@ -129,8 +129,12 @@ async def delete_custom_role(
     payload: dict = Depends(RBAC.require_permission(Permission.USERS_MANAGE)),
 ):
     account_id = payload["account_id"]
+    # Lock the role so invites/role updates (which take FOR SHARE on it)
+    # can't assign it between the in-use count below and the delete.
     role = await db.scalar(
-        select(CustomRole).where(CustomRole.id == role_id, CustomRole.account_id == account_id)
+        select(CustomRole)
+        .where(CustomRole.id == role_id, CustomRole.account_id == account_id)
+        .with_for_update()
     )
     if not role:
         raise HTTPException(404, "Custom role not found")

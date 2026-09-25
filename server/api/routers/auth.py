@@ -26,8 +26,13 @@ async def _is_assignable_role(db: AsyncSession, account_id: int, role_upper: str
     """A fixed role, or a custom role defined in this same account."""
     if role_upper in _VALID_ROLES:
         return True
+    # FOR SHARE holds the role row until this transaction commits, so a
+    # concurrent delete_custom_role (FOR UPDATE) waits and then sees the new
+    # assignment in its in-use count.
     custom = await db.scalar(
-        select(CustomRole.id).where(CustomRole.account_id == account_id, CustomRole.name == role_upper)
+        select(CustomRole.id)
+        .where(CustomRole.account_id == account_id, CustomRole.name == role_upper)
+        .with_for_update(read=True)
     )
     return custom is not None
 
