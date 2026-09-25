@@ -77,8 +77,8 @@ North-star product mandate: [`docs/API_PENTESTING_NORTH_STAR.md`](./API_PENTESTI
 | Concern | Mechanism |
 |---------|-----------|
 | Users | JWT (HS256) + optional `access_token` cookie; roles VIEWER→ADMIN + PLATFORM_ADMIN, plus per-account custom roles |
-| SSO | GitHub OAuth, generic OIDC, SAML 2.0 — `server/modules/auth/oauth_{github,oidc,saml}.py`, configured per tenant via `OAuthProvider.config` (`server/api/routers/oauth.py`) |
-| Custom roles | `CustomRole` model + `/api/custom-roles` CRUD (`server/api/routers/custom_roles.py`); resolved in `RBAC.require_auth` for any role name not in the fixed set |
+| SSO | GitHub OAuth, generic OIDC, SAML 2.0 — `server/modules/auth/oauth_{github,oidc,saml}.py`, configured per tenant via `OAuthProvider.config` (`server/api/routers/oauth.py`); admin UI at `/admin/settings/sso` shows the callback/ACS URLs to register at the IdP, and SP metadata is served at `/api/oauth/saml/{account_id}/metadata` |
+| Custom roles | `CustomRole` model + `/api/custom-roles` CRUD (`server/api/routers/custom_roles.py`); resolved in `RBAC.require_auth` for any role name not in the fixed set; managed at `/admin/settings/roles`, assignable from User Management, and a role still assigned to users cannot be deleted (409). Custom-role users get the customer workspace (`/app`) only |
 | Sensors | `Authorization: Bearer <sensor_key>` / `X-Sensor-Key`; keys hashed at rest (`SENSOR_KEY_HASH_PEPPER`) |
 | Tenant key | `account_id` on almost every row |
 | Isolation | App filters + ContextVar + Postgres RLS (`TENANT_RLS_ENABLED`, **on by default**; no-op on non-Postgres `DATABASE_URL`). Policies cover ~68 tables (`server/modules/rls/row_level_security.py`) and are applied automatically at startup for Postgres deployments |

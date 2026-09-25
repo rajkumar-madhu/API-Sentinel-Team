@@ -29,6 +29,8 @@ export type UserRole =
   | 'MEMBER'
   | 'AUDITOR'
   | 'VIEWER'
+  // Tenant-defined role; backend RBAC enforces its actual permission set.
+  | 'CUSTOM'
   | 'GUEST';
 
 export type WorkspaceKey = 'customer' | 'admin' | 'platform';
@@ -37,6 +39,8 @@ export interface User {
   login: string;
   name?: string;
   role: UserRole;
+  /** Name of the tenant-defined role when `role` is 'CUSTOM'. */
+  customRoleName?: string;
   accounts?: Record<string, unknown>;
 }
 
@@ -66,6 +70,7 @@ const CUSTOMER_WORKSPACE_ROLES: UserRole[] = [
   'MEMBER',
   'AUDITOR',
   'VIEWER',
+  'CUSTOM',
 ];
 
 const ADMIN_WORKSPACE_ROLES: UserRole[] = [
@@ -88,8 +93,13 @@ function normalizeRole(role?: string | null): UserRole {
     case 'AUDITOR':
     case 'VIEWER':
       return normalized;
-    default:
+    case 'GUEST':
+    case undefined:
+    case '':
       return 'GUEST';
+    default:
+      // Any other non-empty role is a tenant-defined custom role.
+      return 'CUSTOM';
   }
 }
 
@@ -111,10 +121,12 @@ function buildUserFromProfile(
       }
     : {};
 
+  const role = normalizeRole(profile.role);
   return {
     login: profile.email,
     name: profile.email.split('@')[0],
-    role: normalizeRole(profile.role),
+    role,
+    customRoleName: role === 'CUSTOM' ? profile.role?.toUpperCase() : undefined,
     accounts,
   };
 }

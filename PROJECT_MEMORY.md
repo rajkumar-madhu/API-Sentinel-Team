@@ -52,7 +52,7 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 
 1. Postgres RLS on by default (`TENANT_RLS_ENABLED=True`); policy coverage expanded from 4 hardcoded tables to all ~68 `account_id`-scoped tables (`server/modules/rls/row_level_security.py`, generated + idempotent), applied automatically at startup for Postgres deployments.
 2. Generic OIDC and SAML 2.0 SSO added alongside the existing GitHub-only OAuth (`server/modules/auth/oauth_oidc.py`, `oauth_saml.py`; `python3-saml` dependency), configurable per tenant via `OAuthProvider.config`.
-3. Custom RBAC roles: `CustomRole` model + `/api/custom-roles` CRUD, resolved by `RBAC.require_auth` alongside the fixed roles.
+3. Custom RBAC roles: `CustomRole` model + `/api/custom-roles` CRUD, resolved by `RBAC.require_auth` alongside the fixed roles. Admin UIs for SSO and roles: `/admin/settings/sso` (IdP setup URLs, provider add/enable/remove) and `/admin/settings/roles` (permission picker); custom roles are assignable in User Management and map to the customer workspace in `auth-context.tsx`.
 4. Billing: Stripe Checkout session creation (`POST /api/billing/checkout/{account_id}`) and quota enforcement (`server/modules/billing/quota.py`) against plan limits at write time; fixed a cross-tenant authorization bug in the billing router.
 5. Compliance reports now cover all 7 frameworks (OWASP/GDPR/HIPAA/PCI/SOC2/NIST/EU AI Act) via `ComplianceMapper` instead of an incomplete duplicate table.
 6. DSAR endpoints (`server/api/routers/privacy.py`): self-service and admin-driven data export/erasure.

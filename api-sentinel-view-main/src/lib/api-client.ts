@@ -52,6 +52,16 @@ export function buildWebSocketUrl(path: string) {
   return `${wsOrigin}${normalizePath(path)}`;
 }
 
+/** Human-readable message from a backend error body ({message} or {detail}). */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.body && typeof err.body === 'object') {
+    const body = err.body as { message?: unknown; detail?: unknown };
+    if (typeof body.message === 'string') return body.message;
+    if (typeof body.detail === 'string') return body.detail;
+  }
+  return fallback;
+}
+
 async function handleApiError(res: Response, path?: string): Promise<never> {
   let errBody: unknown = null;
   try {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, Key, Shield, Radio, FileText, ShieldAlert, ClipboardList, CheckSquare, Settings, Bell } from 'lucide-react';
+import { LayoutGrid, Users, Key, Shield, Radio, FileText, ShieldAlert, ClipboardList, CheckSquare, Settings, Bell, Fingerprint, UserCog } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SettingsCard from '@/components/shared/SettingsCard';
 
@@ -25,6 +25,8 @@ const SettingsPage: React.FC = () => {
           <SettingsCard icon={Users} title="User & Role Administration" description="Manage organizational users, update role assignments." onClick={() => navigate('/admin/settings/users')} />
           <SettingsCard icon={Key} title="API Keys Management" description="Securely create, manage, and rotate API keys." onClick={() => navigate('/admin/settings/api-keys')} />
           <SettingsCard icon={Shield} title="API Attribute Mapping" description="Define the headers and keys used for session, user, role, and tenant attribution." onClick={() => navigate('/admin/settings/attribute-mapping')} />
+          <SettingsCard icon={Fingerprint} title="Single Sign-On" description="Connect Okta, Azure AD, Google, or any OIDC / SAML identity provider." onClick={() => navigate('/admin/settings/sso')} />
+          <SettingsCard icon={UserCog} title="Custom Roles" description="Define roles with exactly the permissions your team needs." onClick={() => navigate('/admin/settings/roles')} />
         </div>
       </div>
 
