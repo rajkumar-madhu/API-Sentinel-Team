@@ -30,6 +30,9 @@ async def test_actor_profile_creation(db_session):
 
 @pytest.mark.asyncio
 async def test_detect_api_behavior_triggers_alert(monkeypatch, db_session):
+    # Exercises the legacy detector, which only owns alerting with the
+    # unified pipeline off (the default "shadow" mode delegates to it).
+    monkeypatch.setattr(settings, "UNIFIED_PIPELINE_MODE", "off")
     monkeypatch.setattr(settings, "DETECTION_WINDOW_SECONDS", 5)
     monkeypatch.setattr(settings, "DETECTION_BURST_THRESHOLD", 2)
     monkeypatch.setattr(settings, "DETECTION_ALERT_COOLDOWN_SECONDS", 0)

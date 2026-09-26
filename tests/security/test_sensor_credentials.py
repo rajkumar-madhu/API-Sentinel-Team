@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from server.models.core import Sensor
 from server.modules.sensors.keys import SENSOR_KEY_HASH_PREFIX, hash_sensor_key
@@ -33,7 +34,13 @@ async def test_sensor_register_hashes_key_at_rest_and_returns_safe_urls(client, 
 
 
 @pytest.mark.asyncio
-async def test_sensor_heartbeat_accepts_header_key_without_url_secret(client, db_session):
+async def test_sensor_heartbeat_accepts_header_key_without_url_secret(client, db_session, test_engine, monkeypatch):
+    # The heartbeat's background stale-sensor sweep opens its own session;
+    # point it at the test database.
+    monkeypatch.setattr(
+        "server.api.routers.sensors.AsyncSessionLocal",
+        async_sessionmaker(bind=test_engine, expire_on_commit=False),
+    )
     raw_key = "raw-sensor-heartbeat-key"
     sensor = Sensor(
         id="sensor-header-heartbeat",

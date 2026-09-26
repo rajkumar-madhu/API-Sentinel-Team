@@ -132,10 +132,15 @@ async def test_confirmed_vuln_via_store_elevates_endpoint_risk(db):
 
 
 @pytest.mark.asyncio
-async def test_detection_amplifies_risk_on_proven_vulnerable_endpoint(db):
+async def test_detection_amplifies_risk_on_proven_vulnerable_endpoint(db, monkeypatch):
     """The full Gap B loop: same threat event scores higher on a proven-vulnerable
     endpoint than on an untested one — Testing's knowledge reaches Detection."""
+    from server.config import settings
     from server.modules.detection.correlation_engine import correlate_threat
+
+    # The risk amplification lives in the legacy correlation path, which the
+    # default "shadow" pipeline mode bypasses.
+    monkeypatch.setattr(settings, "UNIFIED_PIPELINE_MODE", "off")
 
     vulnerable_ep = _endpoint(1000000, risk=1.0)   # proven vulnerable
     safe_ep = _endpoint(1000000, risk=0.0)         # untested / unknown
