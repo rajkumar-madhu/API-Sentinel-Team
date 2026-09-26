@@ -11,16 +11,17 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from sqlalchemy import delete as sa_delete, select, update as sa_update
+from sqlalchemy import delete as sa_delete, func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.modules.auth.rbac import Permission, RBAC, ROLE_PERMISSIONS, _ALL
 from server.modules.persistence.database import get_db
-from server.models.core import CustomRole
+from server.models.core import CustomRole, User
 
 router = APIRouter()
 
-RESERVED_NAMES = set(ROLE_PERMISSIONS.keys())
+# GUEST is the frontend's unauthenticated placeholder role.
+RESERVED_NAMES = set(ROLE_PERMISSIONS.keys()) | {"GUEST"}
 
 
 def _validate_name(name: str) -> str:
@@ -128,11 +129,25 @@ async def delete_custom_role(
     payload: dict = Depends(RBAC.require_permission(Permission.USERS_MANAGE)),
 ):
     account_id = payload["account_id"]
-    result = await db.execute(
-        sa_delete(CustomRole).where(CustomRole.id == role_id, CustomRole.account_id == account_id)
+    # Lock the role so invites/role updates (which take FOR SHARE on it)
+    # can't assign it between the in-use count below and the delete.
+    role = await db.scalar(
+        select(CustomRole)
+        .where(CustomRole.id == role_id, CustomRole.account_id == account_id)
+        .with_for_update()
     )
-    if result.rowcount == 0:
+    if not role:
         raise HTTPException(404, "Custom role not found")
+
+    # Deleting a role that users still hold would silently resolve them to an
+    # empty permission set on their next request.
+    assigned = await db.scalar(
+        select(func.count()).select_from(User).where(User.account_id == account_id, User.role == role.name)
+    )
+    if assigned:
+        raise HTTPException(409, f"Role '{role.name}' is assigned to {assigned} user(s); reassign them first")
+
+    await db.execute(sa_delete(CustomRole).where(CustomRole.id == role_id, CustomRole.account_id == account_id))
     await db.commit()
     return {"deleted": role_id}
 

@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
-from sqlalchemy import String, Integer, DateTime, Float, Boolean, JSON, BigInteger, Text, func, UniqueConstraint
+from sqlalchemy import String, Integer, DateTime, Float, Boolean, JSON, BigInteger, Text, func, UniqueConstraint, Index
 
 Base = declarative_base()
 
@@ -991,6 +991,10 @@ class OAuthProvider(Base):
         "sp_entity_id" (optional, derived from OAUTH_REDIRECT_BASE_URL if unset)}
     """
     __tablename__ = "oauth_providers"
+    # Login/callback routes look up one provider per type per account.
+    __table_args__ = (
+        Index("uq_oauth_providers_account_provider", "account_id", "provider", unique=True),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     account_id: Mapped[int] = mapped_column(BigInteger, default=1000000)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)

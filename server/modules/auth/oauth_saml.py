@@ -67,6 +67,21 @@ def build_saml_settings(
     }
 
 
+def sp_metadata_xml(settings: Dict[str, Any]) -> str:
+    """SP metadata XML for the IdP admin to import. Validates only the SP half
+    of the settings, so it works before the IdP's cert/SSO URL are known."""
+    if not SAML_AVAILABLE:
+        raise SAMLNotAvailableError("python3-saml is not installed")
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings
+
+    saml_settings = OneLogin_Saml2_Settings(settings, sp_validation_only=True)
+    metadata = saml_settings.get_sp_metadata()
+    errors = saml_settings.validate_metadata(metadata)
+    if errors:
+        raise ValueError(f"Invalid SP metadata: {errors}")
+    return metadata.decode() if isinstance(metadata, bytes) else metadata
+
+
 class SAMLProvider:
     def __init__(self, request_data: Dict[str, Any], settings: Dict[str, Any]):
         if not SAML_AVAILABLE:

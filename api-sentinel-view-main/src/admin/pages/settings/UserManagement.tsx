@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import GlassCard from '@/components/ui/GlassCard';
 import { useCustomRoles, useTeamData } from '@/hooks/use-admin';
+import { useAccessRoles } from '@/hooks/use-access-roles';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { toast } from '@/hooks/use-toast';
 import { deleteUserById, inviteUser, updateUserRole } from '@/services/admin.service';
@@ -14,6 +15,7 @@ type CreateMode = 'customer' | 'admin';
 const CUSTOMER_ROLES = ['DEVELOPER', 'MEMBER', 'AUDITOR', 'VIEWER'] as const;
 const ADMIN_ROLES = ['SECURITY_ENGINEER', 'ADMIN'] as const;
 const ALL_DISPLAY_ROLES = [...ADMIN_ROLES, ...CUSTOMER_ROLES] as const;
+const FIXED_ROLES: readonly string[] = [...ALL_DISPLAY_ROLES, 'PLATFORM_ADMIN'];
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN: 'bg-brand/10 text-brand border-brand/20',
@@ -24,9 +26,10 @@ const ROLE_COLORS: Record<string, string> = {
   VIEWER: 'bg-gray-400/10 text-gray-500 border-gray-400/20',
   PLATFORM_ADMIN: 'bg-red-500/10 text-red-600 border-red-500/20',
 };
+const CUSTOM_ROLE_COLOR = 'bg-purple-500/10 text-purple-600 border-purple-500/20';
 
 function RoleBadge({ role }: { role: string }) {
-  const cls = ROLE_COLORS[role] || ROLE_COLORS.MEMBER;
+  const cls = ROLE_COLORS[role] || CUSTOM_ROLE_COLOR;
   return <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${cls}`}>{role.replace('_', ' ')}</span>;
 }
 
@@ -43,6 +46,12 @@ function accessSummary(role: string) {
       detail: 'Internal-only control-plane access.',
     };
   }
+  if (!FIXED_ROLES.includes(role)) {
+    return {
+      title: 'Custom Role',
+      detail: 'Customer workspace, limited to the permissions defined for this role.',
+    };
+  }
   return {
     title: 'Customer Only',
     detail: 'Restricted to the customer workspace under /app.',
@@ -55,6 +64,7 @@ const UserManagement: React.FC = () => {
   const isMobile = useIsMobile();
   const { data: teamData, isLoading: teamLoading } = useTeamData();
   const { data: rolesData, isLoading: rolesLoading } = useCustomRoles();
+  const { data: accessRoles } = useAccessRoles();
 
   const [showInvite, setShowInvite] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>('customer');
@@ -72,12 +82,17 @@ const UserManagement: React.FC = () => {
   const pendingInvites = teamData?.pendingInvitees ?? [];
   const roles = rolesData?.customRoles ?? [];
   const adminUsers = users.filter((user) => ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]));
-  const customerUsers = users.filter((user) => CUSTOMER_ROLES.includes(user.role as typeof CUSTOMER_ROLES[number]));
+  // Tenant-defined custom roles live in the customer workspace alongside the fixed customer roles.
+  const customerUsers = users.filter((user) => !FIXED_ROLES.includes(user.role) || CUSTOMER_ROLES.includes(user.role as typeof CUSTOMER_ROLES[number]));
+  const customRoleNames = useMemo(() => (accessRoles ?? []).map((role) => role.name), [accessRoles]);
 
   const roleOptions = useMemo(
-    () => (createMode === 'customer' ? CUSTOMER_ROLES : ADMIN_ROLES),
-    [createMode],
+    () => (createMode === 'customer' ? [...CUSTOMER_ROLES, ...customRoleNames] : [...ADMIN_ROLES]),
+    [createMode, customRoleNames],
   );
+
+  // Keep the user's current role selectable even if it is not (or no longer) in the list.
+  const assignableRoles = (current: string) => [...new Set([...ALL_DISPLAY_ROLES, ...customRoleNames, current])];
 
   const openCreateModal = (mode: CreateMode) => {
     setCreateMode(mode);
@@ -353,6 +368,18 @@ const UserManagement: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                  {createMode === 'customer' && (
+                    <p className="mt-1.5 text-[11px] text-text-muted">
+                      Need a tailored permission set?{' '}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/admin/settings/roles')}
+                        className="font-semibold text-brand hover:underline"
+                      >
+                        Create a custom role
+                      </button>
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-xl border border-border-subtle bg-bg-base px-4 py-4">
@@ -423,7 +450,7 @@ const UserManagement: React.FC = () => {
                       onChange={(event) => void handleRoleChange(user.id, event.target.value)}
                       className="flex-1 rounded-lg border border-border-subtle bg-bg-base px-3 py-2 text-[11px] text-text-primary"
                     >
-                      {ALL_DISPLAY_ROLES.map((role) => (
+                      {assignableRoles(user.role).map((role) => (
                         <option key={role} value={role}>
                           {role.replace('_', ' ')}
                         </option>
@@ -473,7 +500,7 @@ const UserManagement: React.FC = () => {
                             onBlur={() => setEditingRole(null)}
                             className="rounded border border-brand/30 bg-bg-base px-2 py-1 text-[11px] text-text-primary outline-none"
                           >
-                            {ALL_DISPLAY_ROLES.map((role) => (
+                            {assignableRoles(user.role).map((role) => (
                               <option key={role} value={role}>
                                 {role.replace('_', ' ')}
                               </option>
@@ -529,13 +556,19 @@ const UserManagement: React.FC = () => {
         <div className="flex items-center gap-2 border-b border-border-subtle p-3">
           <Shield size={14} className="text-brand" />
           <span className="text-xs font-bold text-text-primary">Available Roles</span>
-          <span className="rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[11px] text-text-muted">{roles.length}</span>
+          <span className="rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[11px] text-text-muted">{roles.length + (accessRoles?.length ?? 0)}</span>
+          <button
+            onClick={() => navigate('/admin/settings/roles')}
+            className="ml-auto text-[11px] font-semibold text-brand hover:underline"
+          >
+            Manage custom roles
+          </button>
         </div>
         {rolesLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-brand" />
           </div>
-        ) : roles.length === 0 ? (
+        ) : roles.length === 0 && !accessRoles?.length ? (
           <div className="py-10 text-center text-xs text-text-muted">No roles defined.</div>
         ) : (
           <div className="divide-y divide-border-subtle">
@@ -547,6 +580,17 @@ const UserManagement: React.FC = () => {
                 </div>
                 <span className="rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[11px] text-text-muted">
                   {role.apiCollectionIds?.length ?? 0} collections
+                </span>
+              </div>
+            ))}
+            {(accessRoles ?? []).map((role) => (
+              <div key={role.id} className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-white/[0.02]">
+                <div className="flex items-center gap-3">
+                  <RoleBadge role={role.name} />
+                  <span className="text-[11px] text-text-muted">Custom</span>
+                </div>
+                <span className="rounded-full border border-border-subtle bg-bg-elevated px-2 py-0.5 text-[11px] text-text-muted">
+                  {role.permissions.length} permissions
                 </span>
               </div>
             ))}

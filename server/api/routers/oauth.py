@@ -5,8 +5,9 @@ import secrets
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.models.core import OAuthProvider, User
@@ -19,6 +20,7 @@ from server.modules.auth.oauth_saml import (
     SAMLProvider,
     build_saml_request_data,
     build_saml_settings,
+    sp_metadata_xml,
 )
 from server.modules.auth.rbac import require_admin
 from server.modules.persistence.database import get_db
@@ -146,17 +148,59 @@ async def list_providers(
     account_id = payload["account_id"]
     result = await db.execute(select(OAuthProvider).where(OAuthProvider.account_id == account_id))
     providers = result.scalars().all()
+    setup = _setup_urls(account_id)
     return {
         "providers": [
             {
                 "id": provider.id,
                 "provider": provider.provider,
                 "enabled": provider.enabled,
+                "client_id": provider.client_id,
                 "allowed_domains": provider.allowed_domains,
+                "config": provider.config or {},
+                "has_client_secret": bool(provider.client_secret_enc),
                 "created_at": provider.created_at,
+                "setup": _provider_setup(setup, provider),
             }
             for provider in providers
         ]
+    }
+
+
+def _setup_urls(account_id: int) -> dict:
+    """URLs an admin must register at their IdP for each provider type."""
+    base = _redirect_base()
+    return {
+        "github": {"callback_url": f"{base}/api/oauth/github/callback"},
+        "oidc": {"callback_url": f"{base}/api/oauth/oidc/callback"},
+        "saml": {
+            "acs_url": f"{base}/api/oauth/saml/{account_id}/acs",
+            "sp_entity_id": f"{base}/api/oauth/saml/{account_id}/metadata",
+            "metadata_url": f"{base}/api/oauth/saml/{account_id}/metadata",
+        },
+    }
+
+
+def _provider_setup(setup: dict, provider: OAuthProvider) -> dict:
+    urls = dict(setup.get(provider.provider, {}))
+    custom_entity_id = (provider.config or {}).get("sp_entity_id")
+    if provider.provider == "saml" and custom_entity_id:
+        urls["sp_entity_id"] = custom_entity_id
+    return urls
+
+
+@router.get("/providers/setup-info")
+async def provider_setup_info(payload: dict = Depends(require_admin)):
+    """Callback/ACS URLs to register at the IdP, before a provider exists."""
+    account_id = payload["account_id"]
+    return {
+        "account_id": account_id,
+        "urls": _setup_urls(account_id),
+        "login": {
+            "github": f"/api/oauth/github/authorize?account_id={account_id}",
+            "oidc": f"/api/oauth/oidc/authorize?account_id={account_id}",
+            "saml": f"/api/oauth/saml/{account_id}/login",
+        },
     }
 
 
@@ -191,6 +235,15 @@ async def create_provider(
             raise HTTPException(400, f"saml provider requires config.{missing[0]}")
 
     account_id = payload["account_id"]
+    # The authorize/callback/login routes look up one provider per type per
+    # account (scalar_one_or_none), so a second one of the same type would
+    # make them fail.
+    duplicate = await db.scalar(
+        select(OAuthProvider.id).where(OAuthProvider.account_id == account_id, OAuthProvider.provider == provider)
+    )
+    if duplicate:
+        raise HTTPException(409, f"A {provider} provider is already configured for this account")
+
     provider_row = OAuthProvider(
         id=str(uuid.uuid4()),
         account_id=account_id,
@@ -202,8 +255,31 @@ async def create_provider(
         config=config or {},
     )
     db.add(provider_row)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A concurrent request created the same provider type first.
+        await db.rollback()
+        raise HTTPException(409, f"A {provider} provider is already configured for this account")
     return {"id": provider_row.id, "provider": provider, "status": "created"}
+
+
+@router.patch("/providers/{provider_id}")
+async def update_provider(
+    provider_id: str,
+    enabled: bool = Body(..., embed=True),
+    payload: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    account_id = payload["account_id"]
+    provider = await db.scalar(
+        select(OAuthProvider).where(OAuthProvider.id == provider_id, OAuthProvider.account_id == account_id)
+    )
+    if not provider:
+        raise HTTPException(404, "Provider not found")
+    provider.enabled = enabled
+    await db.commit()
+    return {"id": provider_id, "enabled": enabled}
 
 
 @router.delete("/providers/{provider_id}")
@@ -421,6 +497,33 @@ async def _get_saml_provider(db: AsyncSession, account_id: int) -> OAuthProvider
     if not provider:
         raise HTTPException(404, "SAML provider not configured for this account")
     return provider
+
+
+@router.get("/saml/{account_id}/metadata")
+async def saml_sp_metadata(account_id: int, db: AsyncSession = Depends(get_db)):
+    """Public SP metadata (only public URLs, no secrets) for the IdP admin to
+    import. Works before a SAML provider is configured here."""
+    base = _redirect_base()
+    provider = await db.scalar(
+        select(OAuthProvider).where(OAuthProvider.account_id == account_id, OAuthProvider.provider == "saml")
+    )
+    cfg = (provider.config if provider else None) or {}
+    settings = build_saml_settings(
+        sp_entity_id=cfg.get("sp_entity_id") or f"{base}/api/oauth/saml/{account_id}/metadata",
+        acs_url=f"{base}/api/oauth/saml/{account_id}/acs",
+        idp_entity_id=cfg.get("idp_entity_id", ""),
+        idp_sso_url=cfg.get("idp_sso_url", ""),
+        idp_x509_cert=cfg.get("idp_x509_cert", ""),
+    )
+    try:
+        xml = sp_metadata_xml(settings)
+    except SAMLNotAvailableError as exc:
+        raise HTTPException(501, str(exc))
+    except Exception:
+        # Invalid stored SAML config (e.g. a bad sp_entity_id); don't leak details on a public route.
+        logger.exception("SAML SP metadata generation failed for account %s", account_id)
+        raise HTTPException(500, "SAML SP metadata could not be generated; check the SAML provider configuration")
+    return Response(content=xml, media_type="application/samlmetadata+xml")
 
 
 @router.get("/saml/{account_id}/login")

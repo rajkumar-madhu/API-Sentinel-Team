@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 from server.config import settings
 from server.modules.persistence.database import get_db
-from server.models.core import User, Account
+from server.models.core import User, Account, CustomRole
 from server.modules.auth.password_hasher import PasswordHasher
 from server.modules.auth.jwt_issuer import JWTIssuer
 from server.modules.auth.rbac import RBAC, require_admin
@@ -20,7 +20,21 @@ from server.modules.validation.input_validator import InputValidator, Validation
 from server.api.rate_limiter import limiter
 
 _VALID_ROLES = {"ADMIN", "SECURITY_ENGINEER", "DEVELOPER", "MEMBER", "AUDITOR", "VIEWER"}
-_ALL_ROLES = _VALID_ROLES | {"PLATFORM_ADMIN"}
+
+
+async def _is_assignable_role(db: AsyncSession, account_id: int, role_upper: str) -> bool:
+    """A fixed role, or a custom role defined in this same account."""
+    if role_upper in _VALID_ROLES:
+        return True
+    # FOR SHARE holds the role row until this transaction commits, so a
+    # concurrent delete_custom_role (FOR UPDATE) waits and then sees the new
+    # assignment in its in-use count.
+    custom = await db.scalar(
+        select(CustomRole.id)
+        .where(CustomRole.account_id == account_id, CustomRole.name == role_upper)
+        .with_for_update(read=True)
+    )
+    return custom is not None
 
 
 def _generate_temp_password(length: int = 16) -> str:
@@ -287,8 +301,11 @@ async def invite_user(
 ):
     """Invite a new user to the caller's account with a temporary password."""
     role_upper = req.role.upper()
-    if role_upper not in _VALID_ROLES:
-        raise HTTPException(status_code=400, detail=f"Invalid role '{req.role}'. Must be one of: {sorted(_VALID_ROLES)}")
+    if not await _is_assignable_role(db, payload["account_id"], role_upper):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role '{req.role}'. Must be one of {sorted(_VALID_ROLES)} or a custom role in this account",
+        )
 
     existing = await db.execute(select(User).where(User.email == req.email))
     if existing.scalar_one_or_none():
@@ -329,7 +346,7 @@ async def invite_user(
 @router.patch("/users/{user_id}/role")
 async def update_user_role(
     user_id: str,
-    role: str = Body(..., description="ADMIN | SECURITY_ENGINEER | DEVELOPER | MEMBER | AUDITOR | VIEWER"),
+    role: str = Body(..., embed=True, description="A fixed role or a custom role defined in this account"),
     payload: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -340,12 +357,11 @@ async def update_user_role(
     if role_upper == "PLATFORM_ADMIN":
         if caller_role != "PLATFORM_ADMIN":
             raise HTTPException(status_code=403, detail="Only PLATFORM_ADMIN can assign PLATFORM_ADMIN role")
-        allowed = _ALL_ROLES
-    else:
-        allowed = _VALID_ROLES
-
-    if role_upper not in allowed:
-        raise HTTPException(status_code=400, detail=f"Invalid role '{role}'. Must be one of: {sorted(allowed)}")
+    elif not await _is_assignable_role(db, payload["account_id"], role_upper):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role '{role}'. Must be one of {sorted(_VALID_ROLES)} or a custom role in this account",
+        )
 
     result = await db.execute(select(User).where(User.id == user_id, User.account_id == payload["account_id"]))
     user = result.scalar_one_or_none()
