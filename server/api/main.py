@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from slowapi.errors import RateLimitExceeded
 
+from server.modules.auth.request_context import RequestClientContextMiddleware
 from server.api.rate_limiter import limiter
 from server.api.routers import router
 from server.config import settings
@@ -307,6 +308,7 @@ app.add_middleware(
     expose_headers=["*"],
 )
 app.add_middleware(AdaptiveRequestGuard)
+app.add_middleware(RequestClientContextMiddleware)
 app.include_router(router, prefix="/api")
 
 

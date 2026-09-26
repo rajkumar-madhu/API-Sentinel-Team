@@ -47,6 +47,21 @@ export interface LiveLogEntry {
   protocol?: string;
   latencyMs?: number | null;
   source?: string;
+  clientIp?: string;
+  clientId?: string;
+  userAgent?: string;
+  application?: { id: string; name: string } | null;
+}
+
+/** Client fields shared by the REST seed (/stream/recent) and live frames. */
+export function clientFieldsFromRaw(d: Record<string, unknown>): Pick<LiveLogEntry, 'clientIp' | 'clientId' | 'userAgent' | 'application'> {
+  const app = d.application as { id?: unknown; name?: unknown } | null | undefined;
+  return {
+    clientIp: d.client_ip ? String(d.client_ip) : '',
+    clientId: d.client_id ? String(d.client_id) : '',
+    userAgent: d.user_agent ? String(d.user_agent) : '',
+    application: app && app.name ? { id: String(app.id ?? ''), name: String(app.name) } : null,
+  };
 }
 
 type RealtimeMessage = { type: WSEventType | 'log_entry'; data?: unknown };
@@ -97,6 +112,7 @@ function normalizeLogEntry(raw: unknown): LiveLogEntry | null {
     protocol: d.protocol ? String(d.protocol) : '',
     latencyMs: typeof latencyRaw === 'number' ? latencyRaw : latencyRaw != null ? Number(latencyRaw) : null,
     source: d.source ? String(d.source) : '',
+    ...clientFieldsFromRaw(d),
   };
 }
 

@@ -33,10 +33,14 @@ export interface AktoRole {
 export interface AktoAuditLog {
   id: string;
   user: string;
+  userEmail?: string | null;
   action: string;
   timestamp: number;
   details?: string;
   resource?: string;
+  resourceId?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 export interface AdminApiKey {

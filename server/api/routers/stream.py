@@ -13,12 +13,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.modules.analytics.client_activity import applications_for_endpoints, client_activity, serialize_request_log
+from server.modules.ingestion.client_context import extract_client_context
 from server.api.websocket.manager import ws_manager
 from server.config import settings
-from server.models.core import Alert, IngestionJob, MaliciousEventRecord, RequestLog, Sensor, ThreatActor
+from server.models.core import Alert, APIEndpoint, IngestionJob, MaliciousEventRecord, RequestLog, Sensor, ThreatActor
 from server.modules.api_inventory.endpoint_discovery import EndpointDiscovery, inventory_path
 from server.modules.auth.audit import log_action
-from server.modules.auth.rbac import RBAC
+from server.modules.auth.rbac import Permission, RBAC
 from server.modules.cache.redis_cache import bump_cache_version
 from server.modules.detection.pipeline import unified_detection_pipeline
 from server.modules.ingestion.queue import IngestionJobItem, ingestion_queue
@@ -350,6 +352,8 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
             endpoint_id = endpoint.id
             inventoried += 1
 
+        client_ctx = extract_client_context(headers, source_ip)
+        log_id: str | None = None
         if pipeline_mode == "active":
             result = await unified_detection_pipeline.process(
                 db,
@@ -365,6 +369,7 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
                 for signal in result["signals"]
             ]
             threats_detected += len(attacks)
+            log_id = getattr(result.get("envelope"), "request_log_id", None)
         else:
             if pipeline_mode == "shadow":
                 await unified_detection_pipeline.process(
@@ -378,7 +383,9 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
                     shadow=True,
                 )
 
+            log_id = str(uuid.uuid4())
             db.add(RequestLog(
+                id=log_id,
                 account_id=account_id,
                 endpoint_id=endpoint_id,
                 source_ip=source_ip,
@@ -388,6 +395,7 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
                 response_code=status,
                 response_time_ms=latency_ms,
                 created_at=ts,
+                **client_ctx,
             ))
 
             attacks = _detect_attacks(path, headers)
@@ -450,7 +458,9 @@ async def handle_ebpf_ingest_request(request: Request, db: AsyncSession) -> dict
                     ))
 
         ws_batch.append({
+            **({"id": log_id} if log_id else {}),
             "ip": source_ip,
+            **client_ctx,
             "method": method,
             "path": safe_path,
             "host": host,
@@ -521,20 +531,64 @@ async def recent_events(
     )
     overlay = _threat_overlay(evt_result.scalars().all())
 
+    applications = await applications_for_endpoints(db, account_id, (r.endpoint_id for r in logs))
     return [
         {
-            "id": r.id,
-            "ip": r.source_ip,
-            "method": r.method,
-            "path": redact_ingestion_path(r.path),
-            "host": r.host or "",
-            "status": r.response_code,
-            "latency_ms": r.response_time_ms,
-            "timestamp": r.created_at.isoformat() if r.created_at else None,
+            **serialize_request_log(r, applications.get(r.endpoint_id or "")),
             "attacks": _attacks_for_log(overlay, r),
         }
         for r in logs
     ]
+
+
+@router.get("/logs/{log_id}")
+async def request_log_detail(
+    log_id: str,
+    db: AsyncSession = Depends(get_db),
+    payload: dict = Depends(RBAC.require_permission(Permission.TRAFFIC_READ)),
+):
+    """One request with its application, endpoint, and the client's recent activity."""
+    account_id = payload["account_id"]
+    log = await db.scalar(
+        select(RequestLog).where(RequestLog.id == log_id, RequestLog.account_id == account_id)
+    )
+    if not log:
+        raise HTTPException(status_code=404, detail="Request log not found")
+
+    applications = await applications_for_endpoints(db, account_id, [log.endpoint_id])
+    endpoint = None
+    if log.endpoint_id:
+        ep = await db.scalar(
+            select(APIEndpoint).where(APIEndpoint.id == log.endpoint_id, APIEndpoint.account_id == account_id)
+        )
+        if ep:
+            endpoint = {
+                "id": ep.id,
+                "method": ep.method,
+                "path_pattern": ep.path_pattern,
+                "host": ep.host,
+                "risk_score": ep.risk_score,
+                "is_sensitive": ep.is_sensitive,
+                "auth_types": ep.auth_types_found or [],
+                "status": ep.status,
+                "last_seen": ep.last_seen.isoformat() if ep.last_seen else None,
+            }
+
+    evt_result = await db.execute(
+        select(MaliciousEventRecord)
+        .where(MaliciousEventRecord.account_id == account_id)
+        .order_by(MaliciousEventRecord.created_at.desc())
+        .limit(200)
+    )
+    client = log.client_ip or log.source_ip or ""
+    return {
+        "log": {
+            **serialize_request_log(log, applications.get(log.endpoint_id or "")),
+            "attacks": _attacks_for_log(_threat_overlay(evt_result.scalars().all()), log),
+        },
+        "endpoint": endpoint,
+        "client_activity": await client_activity(db, account_id, client) if client else None,
+    }
 
 
 @router.websocket("/live")
@@ -577,14 +631,7 @@ async def websocket_live(websocket: WebSocket):
             await websocket.send_json({
                 "type": "log_entry",
                 "data": {
-                    "id": request_log.id,
-                    "ip": request_log.source_ip,
-                    "method": request_log.method,
-                    "path": redact_ingestion_path(request_log.path),
-                    "host": request_log.host or "",
-                    "status": request_log.response_code,
-                    "latency_ms": request_log.response_time_ms,
-                    "timestamp": request_log.created_at.isoformat() if request_log.created_at else None,
+                    **serialize_request_log(request_log),
                     "attacks": _attacks_for_log(overlay, request_log),
                     "blocked": False,
                 },

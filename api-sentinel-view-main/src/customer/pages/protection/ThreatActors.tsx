@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { RefreshCw, Filter, Calendar, Users, ShieldBan, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Filter, Calendar, Users, ShieldBan, ShieldCheck, X } from 'lucide-react';
 import TimeFilter from '@/components/shared/TimeFilter';
 import DonutChart from '@/components/charts/DonutChart';
 import GeoMap from '@/components/charts/GeoMap';
@@ -11,6 +11,10 @@ import ProgressRing from '@/components/ui/ProgressRing';
 import { useThreatActors, useActorsGeoCount, useSeverityCount, useModifyActorStatus } from '@/hooks/use-protection';
 import { centroidForCountryCode } from '@/lib/country-centroids';
 import { useQueryClient } from '@tanstack/react-query';
+import { useThreatActorDetail } from '@/hooks/use-client-activity';
+import { ClientActivityDetails, ClientField } from '@/components/shared/ClientActivityDetails';
+import { SeverityBadge } from '@/components/shared/Badges';
+import type { Severity } from '@/types';
 
 function formatTs(epoch: number) {
   if (!epoch) return '-';
@@ -26,6 +30,7 @@ function daysAgoTs(days: number) {
 const ThreatActors: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'24h' | '7d'>('24h');
   const [page, setPage] = useState(0);
+  const [detailIp, setDetailIp] = useState<string | null>(null);
   const pageSize = 10;
   const qc = useQueryClient();
 
@@ -141,8 +146,12 @@ const ThreatActors: React.FC = () => {
                 {rows.map(row => {
                   const riskColor = (row.severity || '').toUpperCase() === 'HIGH' || (row.severity || '').toUpperCase() === 'CRITICAL' ? '#EF4444' : '#EAB308';
                   return (
-                    <tr key={row.id} className="data-row-interactive hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3"><input type="checkbox" className="accent-brand" /></td>
+                    <tr
+                      key={row.id}
+                      className="data-row-interactive hover:bg-white/[0.02] transition-colors cursor-pointer"
+                      onClick={() => setDetailIp(row.latestApiIp || row.id)}
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}><input type="checkbox" className="accent-brand" /></td>
                       <td className="px-4 py-3 text-[12px] font-mono text-text-primary">{row.latestApiIp || row.id}</td>
                       <td className="px-4 py-3 text-center">
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ color: riskColor, background: `${riskColor}12`, border: `1px solid ${riskColor}25` }}>{row.severity || '-'}</span>
@@ -150,7 +159,7 @@ const ThreatActors: React.FC = () => {
                       <td className="px-4 py-3 text-center text-[12px] font-mono font-bold text-text-primary">{row.totalRequests}</td>
                       <td className="px-4 py-3 text-[11px] text-text-muted">{(row.latestApiAttackType || []).join(', ') || '-'}</td>
                       <td className="px-4 py-3 text-[11px] text-text-secondary">{row.country || '-'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {row.actorStatus === 'BLOCKED' ? (
                           <button onClick={() => modifyStatus({ actorId: row.id, status: 'MONITORING' })} className="text-[11px] font-bold px-2 py-1 rounded-md bg-sev-low/10 text-sev-low border border-sev-low/20 hover:bg-sev-low/20 transition-all">Unblock</button>
                         ) : (
@@ -171,6 +180,79 @@ const ThreatActors: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+
+      {detailIp && <ThreatActorDetailModal ip={detailIp} onClose={() => setDetailIp(null)} />}
+    </div>
+  );
+};
+
+function toBadgeSeverity(value: string | null): Severity {
+  const v = (value || '').toLowerCase();
+  return (['critical', 'high', 'medium', 'low'].includes(v) ? v : 'info') as Severity;
+}
+
+const ThreatActorDetailModal: React.FC<{ ip: string; onClose: () => void }> = ({ ip, onClose }) => {
+  const { data, isLoading, isError } = useThreatActorDetail(ip);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+      <div
+        className="w-full max-w-3xl bg-bg-surface border border-border-subtle rounded-xl shadow-2xl animate-slide-up m-4"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={`Threat actor ${ip}`}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-border-subtle">
+          <div>
+            <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold">Threat actor</p>
+            <p className="text-sm font-bold font-mono text-text-primary">{ip}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-all" aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
+          {isLoading && <p className="text-[11px] text-text-muted">Loading actor details…</p>}
+          {isError && <p className="text-[11px] text-text-muted">No recorded traffic or events for this actor.</p>}
+          {data && (
+            <>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <ClientField variant="glass" label="Status">{data.actor.status}</ClientField>
+                <ClientField variant="glass" label="Risk score">{data.actor.risk_score ?? '—'}</ClientField>
+                <ClientField variant="glass" label="Events">{data.actor.event_count ?? data.events.length}</ClientField>
+                <ClientField variant="glass" label="Last seen">
+                  {data.actor.last_seen ? new Date(data.actor.last_seen.replace(' ', 'T')).toLocaleString() : '—'}
+                </ClientField>
+              </dl>
+              <div className="rounded-lg border border-border-subtle bg-bg-base p-3">
+                <ClientActivityDetails variant="glass" activity={data.client_activity} />
+              </div>
+              <div>
+                <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold mb-2">Security events</p>
+                {data.events.length === 0 ? (
+                  <p className="text-[11px] text-text-muted">No security events recorded.</p>
+                ) : (
+                  <ul className="divide-y divide-border-subtle rounded-lg border border-border-subtle">
+                    {data.events.map((event) => (
+                      <li key={event.id} className="flex items-start gap-3 px-3 py-2">
+                        <SeverityBadge severity={toBadgeSeverity(event.severity)} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[12px] text-text-primary">{event.category || 'Unclassified'}</p>
+                          <p className="text-[11px] font-mono text-text-muted break-all">
+                            {event.method} {event.host}{event.url}
+                          </p>
+                        </div>
+                        <span className="text-[11px] font-mono text-text-muted shrink-0">
+                          {event.detected_at ? new Date(event.detected_at).toLocaleString() : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

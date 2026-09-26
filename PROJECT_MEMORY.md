@@ -45,6 +45,7 @@ North star: evidence-grade continuous API red team — see `docs/API_PENTESTING_
 5. eBPF ingest unwraps session-4 `{MsgHeader, Batch}` envelopes on `/v1/events` and **upserts `APIEndpoint` inventory**. `request_logs.host` is persisted. OCI blob digests collapse to `{digest}`.  
 6. Request-guard lookup is host-aware so duplicate catalogue rows cannot 500 every API.  
 7. Ingest skips this product's own console polls so Live Feed shows cluster apps, not `/api/stream/recent`.  
+8. Request logs capture client IP, user agent, and a fingerprinted client id; Live Feed, Security Events, Threat Actors, and Audit Logs show client/application detail. Tailwind surface/text/border colors map to the theme CSS variables (dark mode on legacy pages was unreadable before), and the workspace uses a layered `.app-backdrop`.  
 
 **Recent commits:** OpenAPI drift processor + Schema Validation UI + fan-out caps; Evidence UI polish on main.
 

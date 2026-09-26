@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.modules.ingestion.client_context import extract_client_context
 from server.api.rate_limiter import limiter
 from server.api.websocket.manager import ws_manager
 from server.models.core import Alert, APICollection, APIEndpoint, IngestionJob, MaliciousEventRecord, RequestLog, Sensor, ThreatActor
@@ -355,8 +356,10 @@ async def ingest_events_v2(
                     source_ip=source_ip,
                     method=method,
                     path=safe_path,
+                    host=host or None,
                     response_code=status,
                     created_at=ts,
+                    **extract_client_context(headers, source_ip),
                 )
                 db.add(log)
 
@@ -427,6 +430,8 @@ async def ingest_events_v2(
 
             ws_batch.append({
                 "ip":        source_ip,
+                **extract_client_context(headers, source_ip),
+                "host":      host,
                 "method":    method,
                 "path":      safe_path,
                 "status":    status,

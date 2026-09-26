@@ -1,6 +1,9 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
+const themeColor = (variable: string) =>
+  `color-mix(in srgb, var(${variable}) calc(<alpha-value> * 100%), transparent)`;
+
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}", "./index.html"],
@@ -26,11 +29,25 @@ export default {
         "brand-paper": "#F4F1EA",
         "brand-glow": "rgba(255, 91, 46, 0.10)",
         "brand-dim": "rgba(255, 91, 46, 0.05)",
-        "bg-base": "#F4F1EA",
-        "bg-surface": "#FFFCF7",
-        "bg-elevated": "#EBE6DC",
-        "bg-sidebar": "#FFFCF7",
-        "bg-hover": "#E8E3D9",
+        // Surface colors follow the light/dark theme tokens in index.css. They
+        // were hard-coded to the light palette, so every legacy (GlassCard)
+        // page rendered light surfaces under light dark-mode text.
+        // color-mix keeps opacity modifiers like bg-bg-base/50 working.
+        "bg-base": themeColor("--bg-base"),
+        "bg-surface": themeColor("--bg-surface"),
+        "bg-elevated": themeColor("--bg-elevated"),
+        "bg-sidebar": themeColor("--bg-sidebar"),
+        "bg-hover": themeColor("--bg-hover"),
+        // Text / border tokens used across the legacy UI (text-text-muted,
+        // border-border-subtle, …) had no mapping, so those classes produced
+        // no CSS at all and fell back to inherited/default colors.
+        "text-primary": themeColor("--text-primary"),
+        "text-secondary": themeColor("--text-secondary"),
+        "text-muted": themeColor("--text-muted"),
+        "text-disabled": themeColor("--text-disabled"),
+        "text-brand": themeColor("--text-brand"),
+        "border-subtle": themeColor("--border-subtle"),
+        "border-default": themeColor("--border-default"),
         "sev-critical": "#EF4444",
         "sev-high": "#F97316",
         "sev-medium": "#EAB308",

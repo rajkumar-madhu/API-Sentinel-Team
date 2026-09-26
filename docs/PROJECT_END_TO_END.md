@@ -177,6 +177,7 @@ Page → hooks (React Query) → services → lib/api-client.ts
 - Base URL: `(VITE_API_BASE_URL || window.location.origin) + '/api'`
 - Always `credentials: 'include'`; optional in-memory Bearer (not localStorage)
 - WebSocket live feed: `/api/stream/live` (query `?token=` when memory token present)
+- Client context: `request_logs` carries `client_ip`, `user_agent`, and `client_id` (API keys / bearer tokens stored only as a SHA-256 fingerprint, `server/modules/ingestion/client_context.py`). Detail views: `GET /api/stream/logs/{id}`, `GET /api/threat-actors/{ip}/detail`, `GET /api/threat-actors/events/{id}` (all built on `server/modules/analytics/client_activity.py`); the application is resolved from the endpoint's collection. Audit logs record the caller's IP and user agent via `RequestClientContextMiddleware` (transport peer, so uvicorn `--proxy-headers` must be set behind a proxy).
 
 Key hooks: `use-dashboard`, `use-discovery`, `use-testing`, `use-protection`, `use-security-ops`, `use-admin`, `use-openapi-docs`, `use-compliance`.
 

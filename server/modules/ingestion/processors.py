@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 from sqlalchemy import insert, select, update, func
 
+from server.modules.ingestion.client_context import client_id_from, extract_client_context
 from server.models.core import (
     Alert,
     IngestionDeadLetter,
@@ -86,7 +87,10 @@ def _infer_schema_from_body(body: Any) -> Dict[str, Any]:
 def _resolve_actor(event: Dict[str, Any]) -> str:
     req = event.get("request") or {}
     headers = req.get("headers") or {}
-    actor = headers.get("x-api-client-id") or headers.get("x-api-key")
+    actor = headers.get("x-api-client-id")
+    if not actor and headers.get("x-api-key"):
+        # The actor is persisted in request logs, so never store the raw key.
+        actor = client_id_from({"x-api-key": headers["x-api-key"]})
     if not actor:
         actor = event.get("source_ip") or str(headers.get("x-forwarded-for") or "unknown")
     return actor or "anonymous"
@@ -661,9 +665,11 @@ async def process_event_batch(job_id: str, account_id: int, payload: Dict[str, A
                     source_ip=actor_id,
                     method=method,
                     path=safe_path,
+                    host=host,
                     response_code=resp.get("status_code", 200),
                     response_time_ms=resp.get("latency_ms"),
                     created_at=_observed_at_datetime(event.get("observed_at")),
+                    **extract_client_context(req.get("headers") or {}, event.get("source_ip")),
                 ))
                 await db.flush()
                 # publish enriched stream event
@@ -836,6 +842,7 @@ async def process_event_batch(job_id: str, account_id: int, payload: Dict[str, A
                             path=safe_path,
                             response_code=parsed["status"],
                             created_at=parsed["time"],
+                            **extract_client_context({"user-agent": parsed.get("ua") or ""}, parsed["ip"]),
                         ))
                         for attack in attacks:
                             threats += 1

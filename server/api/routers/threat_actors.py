@@ -7,6 +7,14 @@ from server.modules.persistence.database import get_db
 from server.modules.auth.rbac import Permission, RBAC
 from server.modules.utils.redactor import Redactor
 from server.models.core import ThreatActor, MaliciousEvent, MaliciousEventRecord
+from server.modules.analytics.client_activity import (
+    applications_for_endpoints,
+    client_activity,
+    events_for_client,
+    request_log_near_event,
+    serialize_request_log,
+    serialize_security_event,
+)
 import uuid, datetime, time
 
 router = APIRouter()
@@ -78,12 +86,71 @@ async def list_malicious_events(
                 "path": Redactor.redact_text(e.url or ""),
                 "url": Redactor.redact_text(e.url or ""),
                 "method": e.method or "GET",
+                "host": e.host or "",
                 "category": e.category,
                 "subCategory": e.sub_category,
                 "status": e.status,
             }
             for e in events
         ],
+    }
+
+
+@router.get("/events/{event_id}")
+async def security_event_detail(
+    event_id: str,
+    payload: dict = Depends(RBAC.require_permission(Permission.TRAFFIC_READ)),
+    db: AsyncSession = Depends(get_db),
+):
+    """One security event with the request, application, and client behind it."""
+    account_id = payload["account_id"]
+    event = await db.scalar(
+        select(MaliciousEventRecord).where(
+            MaliciousEventRecord.id == event_id,
+            MaliciousEventRecord.account_id == account_id,
+        )
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Security event not found")
+    request_log = await request_log_near_event(db, account_id, event)
+    request = None
+    if request_log:
+        applications = await applications_for_endpoints(db, account_id, [request_log.endpoint_id])
+        request = serialize_request_log(request_log, applications.get(request_log.endpoint_id or ""))
+    client = event.ip or event.actor
+    return {
+        "event": serialize_security_event(event),
+        "request": request,
+        "client_activity": await client_activity(db, account_id, client) if client else None,
+    }
+
+
+@router.get("/{ip}/detail")
+async def threat_actor_detail(
+    ip: str,
+    payload: dict = Depends(RBAC.require_permission(Permission.TRAFFIC_READ)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Everything known about one actor: status, traffic, clients, and events."""
+    account_id = payload["account_id"]
+    actor = await db.scalar(
+        select(ThreatActor).where(ThreatActor.account_id == account_id, ThreatActor.source_ip == ip)
+    )
+    activity = await client_activity(db, account_id, ip)
+    events = await events_for_client(db, account_id, ip)
+    if not actor and not activity["request_count"] and not events:
+        raise HTTPException(status_code=404, detail="Threat actor not found")
+    return {
+        "actor": {
+            "id": actor.id,
+            "source_ip": actor.source_ip,
+            "status": actor.status,
+            "event_count": actor.event_count,
+            "risk_score": actor.risk_score,
+            "last_seen": str(actor.last_seen) if actor.last_seen else None,
+        } if actor else {"source_ip": ip, "status": "UNTRACKED"},
+        "client_activity": activity,
+        "events": events,
     }
 
 
