@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from server.models.core import AuditLog
 from server.modules.auth.encryption import Encryption
+from server.modules.auth.request_context import get_request_client
 from typing import Optional, Dict, Any
 import json
 
@@ -95,6 +96,8 @@ async def log_action(
     Sensitive fields are encrypted."""
     details_encrypted = None
     ip_encrypted = None
+    request_ip, user_agent = get_request_client()
+    ip_address = ip_address or request_ip
     
     if details and _contains_sensitive_data(details):
         details_encrypted = Encryption.encrypt(json.dumps(details))
@@ -112,7 +115,20 @@ async def log_action(
         details=details,
         details_encrypted=details_encrypted,
         ip_address=ip_address if not ip_encrypted else None,
-        ip_address_encrypted=ip_encrypted
+        ip_address_encrypted=ip_encrypted,
+        user_agent=user_agent,
     )
     db.add(log)
     await db.flush()
+
+
+def decrypt_audit_ip(log: AuditLog) -> Optional[str]:
+    """Display IP for AUDIT_READ callers (stored encrypted at rest)."""
+    if log.ip_address:
+        return log.ip_address
+    if not log.ip_address_encrypted:
+        return None
+    try:
+        return Encryption.decrypt(log.ip_address_encrypted)
+    except Exception:
+        return None

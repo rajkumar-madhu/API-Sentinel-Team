@@ -42,8 +42,8 @@ def test_postgres_connection_gets_tenant_set_local(rls_on_with_postgres_url):
 
     assert len(connection.statements) == 1
     sql, params = connection.statements[0]
-    assert sql.startswith(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME}")
-    assert params == {"account_id": "1000000"}
+    assert sql == "SELECT set_config(:setting, :account_id, true)"
+    assert params == {"setting": settings.TENANT_RLS_SETTING_NAME, "account_id": "1000000"}
 
 
 def test_no_set_local_without_tenant(monkeypatch):

@@ -15,6 +15,8 @@ import ResponseActions from '@/components/widgets/ResponseActions';
 import { useSecurityEvents, useSeverityCount, useThreatCategoryCount } from '@/hooks/use-protection';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AktoMaliciousEvent } from '@/services/protection.service';
+import { useSecurityEventDetail } from '@/hooks/use-client-activity';
+import { ClientActivityDetails, ClientField, RequestClientFields } from '@/components/shared/ClientActivityDetails';
 
 function formatTs(epoch: number) {
   if (!epoch) return '-';
@@ -36,6 +38,60 @@ function daysAgoTs(days: number) {
 }
 
 const sevBorderColors: Record<string, string> = { critical: '#EF4444', major: '#632CA6', medium: '#EAB308', low: '#22C55E', info: '#3B82F6' };
+
+/** Client, application, and payload context for one event (loaded on open). */
+const SecurityEventClientSection: React.FC<{ eventId: string; fallbackIp: string }> = ({ eventId, fallbackIp }) => {
+  const { data, isLoading, isError } = useSecurityEventDetail(eventId);
+  if (isLoading) {
+    return <p className="text-[11px] text-text-muted">Loading client details…</p>;
+  }
+  if (isError || !data) {
+    return (
+      <dl className="grid gap-2">
+        <ClientField variant="glass" label="Source IP">{fallbackIp}</ClientField>
+      </dl>
+    );
+  }
+  const { event, request, client_activity: activity } = data;
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border-subtle bg-bg-base p-3 space-y-3">
+        <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold">Client & application</p>
+        {request ? (
+          <RequestClientFields variant="glass" log={request} />
+        ) : (
+          <dl className="grid gap-2">
+            <ClientField variant="glass" label="Client IP">{event.ip || '—'}</ClientField>
+            <ClientField variant="glass" label="Host">{event.host || '—'}</ClientField>
+          </dl>
+        )}
+        <dl className="grid gap-2">
+          {event.session_id && <ClientField variant="glass" label="Session">{event.session_id}</ClientField>}
+          {event.context_source && <ClientField variant="glass" label="Detected by">{event.context_source}</ClientField>}
+          {(event.country_code || event.dest_country_code) && (
+            <ClientField variant="glass" label="Geo">
+              {[event.country_code, event.dest_country_code].filter(Boolean).join(' → ')}
+            </ClientField>
+          )}
+          {event.successful_exploit && <ClientField variant="glass" label="Exploit">Confirmed successful</ClientField>}
+        </dl>
+      </div>
+      {event.payload && (
+        <div>
+          <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold mb-2">Payload (redacted)</p>
+          <pre className="max-h-40 overflow-auto rounded-lg border border-border-subtle bg-bg-base p-3 text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-all">
+            {event.payload}
+          </pre>
+        </div>
+      )}
+      {activity && activity.request_count > 0 && (
+        <div className="rounded-lg border border-border-subtle bg-bg-base p-3">
+          <ClientActivityDetails variant="glass" activity={activity} />
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SecurityEvents: React.FC = () => {
   const [timeRange, setTimeRange] = useState<'24h' | '7d'>('24h');
@@ -328,10 +384,14 @@ const SecurityEvents: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold mb-2">Summary</p>
-                <p className="text-sm text-text-secondary">{selectedEvent.description}</p>
-              </div>
+              {selectedEvent.description && (
+                <div>
+                  <p className="text-[11px] text-text-muted uppercase tracking-wider font-semibold mb-2">Summary</p>
+                  <p className="text-sm text-text-secondary">{selectedEvent.description}</p>
+                </div>
+              )}
+
+              <SecurityEventClientSection eventId={selectedEvent.id} fallbackIp={selectedEvent.ip} />
 
               {/* Response Actions */}
               <ResponseActions

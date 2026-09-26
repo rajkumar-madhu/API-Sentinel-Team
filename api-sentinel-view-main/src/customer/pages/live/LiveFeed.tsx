@@ -5,9 +5,11 @@ import {
 } from 'lucide-react';
 import QueryError from '@/components/shared/QueryError';
 import { fetchWithSession, get } from '@/lib/api-client';
-import { useLiveTraffic, type LiveLogEntry } from '@/lib/realtime';
+import { clientFieldsFromRaw, useLiveTraffic, type LiveLogEntry } from '@/lib/realtime';
+import { useRequestLogDetail } from '@/hooks/use-client-activity';
+import { ClientActivityDetails, RequestClientFields } from '@/components/shared/ClientActivityDetails';
 import {
-  formatAbsolute, formatClock, formatLatency, formatProtocol, formatRelative, methodTone, statusTone,
+  describeUserAgent, formatAbsolute, formatClock, formatLatency, formatProtocol, formatRelative, methodTone, statusTone,
 } from '@/lib/format';
 import EvidencePanel from '@/components/ui/EvidencePanel';
 import EvidenceSectionHead from '@/components/ui/EvidenceSectionHead';
@@ -43,11 +45,15 @@ function methodBucket(method: string): MethodFilter {
 }
 
 function exportCsv(rows: LiveLogEntry[]): void {
-  const header = 'Timestamp,IP,Host,Method,Path,Status,Protocol,LatencyMs,Threats\n';
+  const header = 'Timestamp,IP,ClientIP,ClientID,UserAgent,Application,Host,Method,Path,Status,Protocol,LatencyMs,Threats\n';
   const body = rows
     .map((r) => {
       const threats = r.attacks.map((a) => `${a.category}(${a.severity})`).join('; ');
-      return `"${r.timestamp}","${r.ip}","${r.host ?? ''}","${r.method}","${r.path}",${r.status},"${r.protocol ?? ''}",${r.latencyMs ?? ''},"${threats}"`;
+      const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      return [
+        cell(r.timestamp), cell(r.ip), cell(r.clientIp), cell(r.clientId), cell(r.userAgent), cell(r.application?.name),
+        cell(r.host), cell(r.method), cell(r.path), r.status, cell(r.protocol), r.latencyMs ?? '', cell(threats),
+      ].join(',');
     })
     .join('\n');
   const blob = new Blob([header + body], { type: 'text/csv' });
@@ -76,6 +82,47 @@ async function copyText(value: string): Promise<void> {
 }
 
 const METHOD_FILTERS: MethodFilter[] = ['ALL', 'GET', 'POST', 'PUT', 'DELETE', 'OTHER'];
+
+/** Client / application section of the inspector, enriched from the server when the row is persisted. */
+const LiveEntryClientDetail: React.FC<{ entry: LiveLogEntry }> = ({ entry }) => {
+  // Frames that never hit the database carry a client-generated id (see genId in realtime.ts).
+  const persisted = !/^\d{13}-[a-z0-9]{5}$/.test(entry.id);
+  const { data, isLoading } = useRequestLogDetail(persisted ? entry.id : null);
+  const log = data?.log ?? {
+    id: entry.id,
+    ip: entry.ip,
+    client_ip: entry.clientIp || null,
+    client_id: entry.clientId || null,
+    user_agent: entry.userAgent || null,
+    method: entry.method,
+    path: entry.path,
+    host: entry.host ?? '',
+    status: entry.status,
+    latency_ms: entry.latencyMs ?? null,
+    timestamp: entry.timestamp,
+    endpoint_id: null,
+    application: entry.application ? { ...entry.application } : null,
+  };
+  return (
+    <div className="space-y-4 border-t pt-3" style={{ borderColor: 'var(--evd-line)' }}>
+      <span className="evd-mono text-[10px] tracking-[0.14em]" style={{ color: 'var(--evd-ink-muted)' }}>
+        CLIENT & APPLICATION
+      </span>
+      <RequestClientFields variant="evidence" log={log} />
+      {data?.endpoint && (
+        <dl className="evd-kv">
+          <div><dt>Endpoint</dt><dd>{data.endpoint.method} {data.endpoint.path_pattern}</dd></div>
+          <div><dt>Risk</dt><dd>{data.endpoint.risk_score ?? '—'}</dd></div>
+          <div><dt>Auth</dt><dd>{data.endpoint.auth_types.length ? data.endpoint.auth_types.join(', ') : 'none seen'}</dd></div>
+        </dl>
+      )}
+      {isLoading && (
+        <p className="evd-mono text-[10px]" style={{ color: 'var(--evd-ink-muted)' }}>Loading client activity…</p>
+      )}
+      {data?.client_activity && <ClientActivityDetails variant="evidence" activity={data.client_activity} />}
+    </div>
+  );
+};
 
 const LiveFeed: React.FC = () => {
   const { connected, recentLogs, clearLogs, seedLogs } = useLiveTraffic();
@@ -113,6 +160,7 @@ const LiveFeed: React.FC = () => {
         protocol: d.protocol ? String(d.protocol) : '',
         latencyMs: typeof d.latency_ms === 'number' ? d.latency_ms : null,
         source: d.source ? String(d.source) : '',
+        ...clientFieldsFromRaw(d),
       }));
       seedLogs(items);
       return items;
@@ -145,7 +193,7 @@ const LiveFeed: React.FC = () => {
       if (methodFilter !== 'ALL' && methodBucket(e.method) !== methodFilter) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const hay = `${e.ip} ${e.path} ${e.host ?? ''} ${e.method} ${e.status}`.toLowerCase();
+        const hay = `${e.ip} ${e.clientIp ?? ''} ${e.clientId ?? ''} ${e.userAgent ?? ''} ${e.application?.name ?? ''} ${e.path} ${e.host ?? ''} ${e.method} ${e.status}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -211,7 +259,7 @@ const LiveFeed: React.FC = () => {
               <Search size={12} style={{ color: 'var(--evd-ink-muted)' }} />
               <input
                 type="text"
-                placeholder="IP, host, path, method…"
+                placeholder="IP, app, client, user agent, path…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="evd-mono text-[11px] bg-transparent outline-none w-full"
@@ -279,7 +327,7 @@ const LiveFeed: React.FC = () => {
           </button>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div ref={tableBodyRef} onScroll={handleScroll} className="overflow-auto" style={{ maxHeight: 580 }}>
             <table className="evd-table min-w-[720px]">
               <thead className="sticky top-0 z-10">
@@ -342,16 +390,23 @@ const LiveFeed: React.FC = () => {
                           {formatRelative(entry.timestamp, now)}
                         </div>
                       </td>
-                      <td className="evd-mono text-[12px] whitespace-nowrap">{entry.ip || '—'}</td>
+                      <td className="whitespace-nowrap">
+                        <div className="evd-mono text-[12px]">{entry.clientIp || entry.ip || '—'}</div>
+                        {entry.userAgent ? (
+                          <div className="evd-mono text-[10px] max-w-[150px] truncate" style={{ color: 'var(--evd-ink-muted)' }} title={entry.userAgent}>
+                            {describeUserAgent(entry.userAgent).label}
+                          </div>
+                        ) : null}
+                      </td>
                       <td>
                         <span className="evd-mono text-[10px] font-bold px-2 py-0.5" style={{ background: mc.bg, color: mc.text }}>
                           {entry.method}
                         </span>
                       </td>
                       <td className="max-w-[320px]">
-                        {entry.host ? (
+                        {entry.host || entry.application ? (
                           <div className="evd-mono text-[10px] truncate" style={{ color: 'var(--evd-ink-muted)' }}>
-                            {entry.host}
+                            {[entry.application?.name, entry.host].filter(Boolean).join(' · ')}
                           </div>
                         ) : null}
                         <div className="evd-mono text-[12px] truncate">{entry.path}</div>
@@ -412,6 +467,7 @@ const LiveFeed: React.FC = () => {
                     </dd>
                   </div>
                 </dl>
+                <LiveEntryClientDetail entry={selected} />
               </div>
             ) : (
               <p className="evd-mono text-[11px]" style={{ color: 'var(--evd-ink-muted)' }}>

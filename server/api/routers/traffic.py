@@ -15,6 +15,7 @@ from urllib.parse import urlparse, unquote
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from server.modules.ingestion.client_context import extract_client_context
 from server.config import settings
 from server.modules.persistence.database import get_db
 from server.modules.traffic_capture.sample_data_writer import SampleDataWriter
@@ -365,8 +366,10 @@ async def import_nginx_log(
             source_ip=entry["ip"],
             method=method,
             path=raw_path,
+            host=None if host == "unknown" else host,
             response_code=entry["status"],
             created_at=entry["ts"],
+            **extract_client_context({"user-agent": entry.get("ua") or ""}, entry["ip"]),
         )
         db.add(req_log)
         stats["request_logs"] += 1

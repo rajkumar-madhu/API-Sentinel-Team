@@ -7,7 +7,8 @@ from server.modules.persistence.database import get_db
 from server.modules.auth.rbac import Permission, RBAC
 from server.modules.utils.redactor import Redactor
 from server.modules.validation.input_validator import InputValidator, ValidationError
-from server.models.core import AuditLog
+from server.models.core import AuditLog, User
+from server.modules.auth.audit import decrypt_audit_ip
 
 router = APIRouter()
 
@@ -96,6 +97,13 @@ async def list_audit_logs(
 
     result = await db.execute(stmt)
     logs = result.scalars().all()
+    user_ids = {l.user_id for l in logs if l.user_id}
+    emails: dict[str, str] = {}
+    if user_ids:
+        user_rows = await db.execute(
+            select(User.id, User.email).where(User.account_id == account_id, User.id.in_(user_ids))
+        )
+        emails = {uid: email for uid, email in user_rows.all()}
     return {
         "total": len(logs),
         "logs": [
@@ -107,8 +115,10 @@ async def list_audit_logs(
                 "user_id": l.user_id,
                 "details": _safe_details(l),
                 "details_encrypted": bool(l.details_encrypted),
-                "ip_address": l.ip_address,
+                "user_email": emails.get(l.user_id or ""),
+                "ip_address": decrypt_audit_ip(l),
                 "ip_address_encrypted": bool(l.ip_address_encrypted),
+                "user_agent": l.user_agent,
                 "created_at": str(l.created_at),
             }
             for l in logs

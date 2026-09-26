@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from server.modules.auth.audit import decrypt_audit_ip
 from server.modules.persistence.database import get_db
 from server.modules.utils.redactor import Redactor
 from server.models.core import (
@@ -314,15 +315,26 @@ async def fetch_audit_data(
     total = (await db.execute(
         select(func.count()).select_from(AuditLog).where(AuditLog.account_id == account_id)
     )).scalar()
+    user_ids = {log.user_id for log in logs if log.user_id}
+    emails: dict[str, str] = {}
+    if user_ids:
+        user_rows = await db.execute(
+            select(User.id, User.email).where(User.account_id == account_id, User.id.in_(user_ids))
+        )
+        emails = {uid: email for uid, email in user_rows.all()}
     return {
         "auditLogs": [
             {
                 "id": str(log.id),
                 "user": log.user_id or "",
+                "userEmail": emails.get(log.user_id or ""),
                 "action": log.action or "",
                 "timestamp": int(log.created_at.timestamp() * 1000) if log.created_at else 0,
                 "details": _safe_audit_details(log),
                 "resource": log.resource_type or "",
+                "resourceId": log.resource_id or "",
+                "ipAddress": decrypt_audit_ip(log),
+                "userAgent": log.user_agent,
             }
             for log in logs
         ],

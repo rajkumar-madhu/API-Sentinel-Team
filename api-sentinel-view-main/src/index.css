@@ -14,6 +14,11 @@
     --bg-hover: #E8E3D9;
     --bg-selected: rgba(255, 91, 46, 0.10);
 
+    /* App backdrop (see .app-backdrop) */
+    --backdrop-glow-warm: rgba(255, 91, 46, 0.10);
+    --backdrop-glow-cool: rgba(43, 76, 255, 0.06);
+    --backdrop-grid: rgba(14, 17, 22, 0.05);
+
     /* Brand Accent - Wecrew coral (identity) + blue (interactive) */
     --brand: #FF5B2E;
     --brand-light: #FF8A5B;
@@ -60,6 +65,10 @@
     --bg-sidebar: #0A0C10;
     --bg-hover: #252B36;
     --bg-selected: rgba(255, 91, 46, 0.16);
+
+    --backdrop-glow-warm: rgba(255, 91, 46, 0.11);
+    --backdrop-glow-cool: rgba(107, 133, 255, 0.09);
+    --backdrop-grid: rgba(244, 241, 234, 0.04);
 
     --brand: #FF5B2E;
     --brand-light: #FF8A5B;
@@ -858,4 +867,28 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- app backdrop: paper base, two soft light sources, fading grid ---------- */
+.app-backdrop {
+  isolation: isolate;
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(1100px 640px at 100% -12%, var(--backdrop-glow-warm), transparent 62%),
+    radial-gradient(900px 600px at -8% 112%, var(--backdrop-glow-cool), transparent 64%);
+  background-repeat: no-repeat;
+}
+
+.app-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--backdrop-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--backdrop-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 45%, transparent 85%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 45%, transparent 85%);
 }

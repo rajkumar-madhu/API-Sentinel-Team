@@ -274,6 +274,13 @@ class RequestLog(Base):
     host: Mapped[str] = mapped_column(String(255), nullable=True)
     response_code: Mapped[int] = mapped_column(Integer, nullable=True)
     response_time_ms: Mapped[int] = mapped_column(Integer, nullable=True)
+    # Client context captured at ingest. `source_ip` historically holds the
+    # resolved actor (which may be a client id); `client_ip` is always the
+    # network address. `client_id` never stores a raw credential — API keys
+    # and bearer tokens are reduced to a short SHA-256 fingerprint.
+    client_ip: Mapped[str] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str] = mapped_column(String(512), nullable=True)
+    client_id: Mapped[str] = mapped_column(String(128), nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -425,6 +432,7 @@ class AuditLog(Base):
     details_encrypted: Mapped[str] = mapped_column(Text, nullable=True)
     ip_address: Mapped[str] = mapped_column(String(45), nullable=True)
     ip_address_encrypted: Mapped[str] = mapped_column(String(100), nullable=True)
+    user_agent: Mapped[str] = mapped_column(String(512), nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

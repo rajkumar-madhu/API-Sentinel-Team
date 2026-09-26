@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl, urlparse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from server.modules.ingestion.client_context import extract_client_context
 from server.models.core import APICollection, APIEndpoint, RequestLog
 from server.modules.api_inventory.path_normalizer import PathNormalizer
 from server.modules.ingestion.redaction import redact_ingestion_path
@@ -275,9 +276,11 @@ class NormalizationAgent:
             source_ip=envelope.source_ip or envelope.actor_id,
             method=envelope.method,
             path=redact_ingestion_path(envelope.path),
+            host=envelope.host if envelope.host and envelope.host != "unknown" else None,
             response_code=envelope.status_code,
             response_time_ms=envelope.latency_ms,
             created_at=_datetime_from_ms(envelope.observed_at_ms),
+            **extract_client_context(envelope.request_headers, envelope.source_ip),
         )
         db.add(log)
         await db.flush()

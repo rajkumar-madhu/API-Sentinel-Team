@@ -1,5 +1,6 @@
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 from server.models.core import APIEndpoint, SampleData
 from sqlalchemy.future import select
 from server.modules.persistence.database import AsyncSessionLocal
@@ -11,9 +12,17 @@ class OpenAPIGenerator:
     """
     Generates a full OpenAPI 3.0.0 specification from the inventory.
     """
-    async def generate_spec(self, collection_name: str = "Discovered API", account_id: int | None = None) -> Dict[str, Any]:
+    async def generate_spec(
+        self,
+        collection_name: str = "Discovered API",
+        account_id: int | None = None,
+        session: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
         """
         Gathers all endpoints and structured data to build the final spec.
+
+        Request handlers pass their own ``session`` so the read shares the
+        request's database and tenant context; background callers omit it.
         """
         spec = {
             "openapi": "3.0.0",
@@ -26,37 +35,39 @@ class OpenAPIGenerator:
             "components": {"schemas": {}}
         }
 
-        async with AsyncSessionLocal() as session:
-            stmt = select(APIEndpoint)
-            if account_id is not None:
-                stmt = stmt.where(APIEndpoint.account_id == account_id)
-            result = await session.execute(stmt)
-            endpoints = result.scalars().all()
+        stmt = select(APIEndpoint)
+        if account_id is not None:
+            stmt = stmt.where(APIEndpoint.account_id == account_id)
+        if session is not None:
+            endpoints = (await session.execute(stmt)).scalars().all()
+        else:
+            async with AsyncSessionLocal() as own_session:
+                endpoints = (await own_session.execute(stmt)).scalars().all()
 
-            for ep in endpoints:
-                # Prefer the templated path_pattern (/users/{id}) over the
-                # literal observed path (/users/12345) so the generated spec
-                # collapses equivalent endpoints instead of exploding into
-                # one path per observed ID.
-                path_key = ep.path_pattern or ep.path
-                if not path_key:
-                    continue
-                if path_key not in spec["paths"]:
-                    spec["paths"][path_key] = {}
+        for ep in endpoints:
+            # Prefer the templated path_pattern (/users/{id}) over the
+            # literal observed path (/users/12345) so the generated spec
+            # collapses equivalent endpoints instead of exploding into
+            # one path per observed ID.
+            path_key = ep.path_pattern or ep.path
+            if not path_key:
+                continue
+            if path_key not in spec["paths"]:
+                spec["paths"][path_key] = {}
 
-                spec["paths"][path_key][ep.method.lower()] = {
-                    "summary": f"Observed {ep.method} on {path_key}",
-                    "responses": {
-                        "200": {
-                            "description": "Successful response observed",
-                            "content": {
-                                "application/json": {
-                                    "schema": self._infer_json_schema(ep.last_response_body)
-                                }
+            spec["paths"][path_key][ep.method.lower()] = {
+                "summary": f"Observed {ep.method} on {path_key}",
+                "responses": {
+                    "200": {
+                        "description": "Successful response observed",
+                        "content": {
+                            "application/json": {
+                                "schema": self._infer_json_schema(ep.last_response_body)
                             }
                         }
                     }
                 }
+            }
 
         return spec
 

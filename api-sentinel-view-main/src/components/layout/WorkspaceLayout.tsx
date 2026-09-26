@@ -20,7 +20,7 @@ const WorkspaceShellInner: React.FC<{ workspace: WorkspaceConfig }> = ({ workspa
   return (
     <div className="flex min-h-screen w-full overflow-hidden bg-bg-base text-text-primary">
       <Sidebar workspace={workspace} />
-      <main className="relative flex flex-1 flex-col overflow-hidden">
+      <main className="app-backdrop relative flex flex-1 flex-col overflow-hidden">
         <TopBar workspace={workspace} />
         <div
           ref={contentRef}
