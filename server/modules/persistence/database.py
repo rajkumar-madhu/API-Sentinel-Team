@@ -73,6 +73,12 @@ async def get_read_db():
         yield session
 
 
+# set_config(..., is_local => true) is SET LOCAL in function form. SET itself
+# is a utility statement and cannot take bind parameters, so under asyncpg
+# `SET LOCAL x = $1` is a syntax error on every request.
+_SET_TENANT_SQL = text("SELECT set_config(:setting, :account_id, true)")
+
+
 async def apply_tenant_context(session) -> None:
     """Explicit entry point for callers that manage their own session outside
     a request (background workers) and know account_id is already set in the
@@ -86,8 +92,8 @@ async def apply_tenant_context(session) -> None:
     if account_id is None:
         return
     await session.execute(
-        text(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME} = :account_id"),
-        {"account_id": str(account_id)},
+        _SET_TENANT_SQL,
+        {"setting": settings.TENANT_RLS_SETTING_NAME, "account_id": str(account_id)},
     )
 
 
@@ -103,7 +109,7 @@ def _apply_tenant_context_on_begin(session: Session, transaction, connection) ->
     sessions with no tenant context set. `after_begin` instead fires when
     the first query actually runs, which is always after every dependency —
     including auth — has resolved, so get_current_account_id() is reliably
-    populated by then. See the same idempotent SET LOCAL logic as
+    populated by then. See the same idempotent set_config logic as
     apply_tenant_context() above.
     """
     if not settings.TENANT_RLS_ENABLED:
@@ -116,8 +122,8 @@ def _apply_tenant_context_on_begin(session: Session, transaction, connection) ->
     if account_id is None:
         return
     connection.execute(
-        text(f"SET LOCAL {settings.TENANT_RLS_SETTING_NAME} = :account_id"),
-        {"account_id": str(account_id)},
+        _SET_TENANT_SQL,
+        {"setting": settings.TENANT_RLS_SETTING_NAME, "account_id": str(account_id)},
     )
 
 

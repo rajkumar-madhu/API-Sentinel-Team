@@ -103,7 +103,7 @@ async def rebuild_openapi(
     db: AsyncSession = Depends(get_db),
 ):
     account_id = payload.get("account_id")
-    spec = await _gen.generate_spec(collection_name="Discovered API", account_id=account_id)
+    spec = await _gen.generate_spec(collection_name="Discovered API", account_id=account_id, session=db)
     record = OpenAPISpec(account_id=account_id, spec_json=spec)
     db.add(record)
     await db.commit()
