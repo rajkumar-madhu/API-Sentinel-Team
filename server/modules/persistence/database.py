@@ -79,7 +79,8 @@ async def apply_tenant_context(session) -> None:
     tenancy ContextVar by the time they call this."""
     if not settings.TENANT_RLS_ENABLED:
         return
-    if "postgres" not in settings.DATABASE_URL:
+    bind = getattr(session, "bind", None)
+    if bind is None or bind.dialect.name != "postgresql":
         return
     account_id = get_current_account_id()
     if account_id is None:
@@ -107,7 +108,9 @@ def _apply_tenant_context_on_begin(session: Session, transaction, connection) ->
     """
     if not settings.TENANT_RLS_ENABLED:
         return
-    if "postgres" not in settings.DATABASE_URL:
+    # Check the connection actually in use, not DATABASE_URL: sessions bound to
+    # another engine (e.g. SQLite in tests) must not receive Postgres-only SQL.
+    if connection.dialect.name != "postgresql":
         return
     account_id = get_current_account_id()
     if account_id is None:

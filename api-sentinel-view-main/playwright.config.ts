@@ -35,6 +35,9 @@ const backendEnv = {
   // DEBUG alone must not fail-open private targets in TargetGuard.from_settings.
   PENTEST_ALLOW_PRIVATE_TARGETS: 'true',
   PENTEST_TARGET_ALLOWLIST: '127.0.0.1,localhost',
+  // The frontend calls the backend cross-origin; allow whichever port it runs on
+  // (CI uses a non-default one, which the built-in CORS list does not include).
+  CORS_ORIGINS: JSON.stringify([frontendBaseUrl, `http://localhost:${frontendPort}`]),
 };
 
 function formatEnvForShell(env: Record<string, string>) {
