@@ -97,13 +97,8 @@ async def correlate_threat(
                 "auto_blocked": bool(decision.auto_blocked),
                 "was_already_blocked": bool(getattr(actor, "status", "") == "BLOCKED" and not decision.auto_blocked),
             }
-        return {
-            "actor_id": envelope.actor_id,
-            "risk_score": 0.0,
-            "event_count": 0,
-            "auto_blocked": False,
-            "was_already_blocked": False,
-        }
+        # Shadow mode: the unified pass above only observed (no writes). Fall
+        # through so the legacy correlation below stays authoritative.
 
     result = await db.execute(
         select(ThreatActor).where(

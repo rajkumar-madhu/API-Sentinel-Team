@@ -85,7 +85,7 @@ async def detect_api_behavior(
         return
 
     if unified_detection_pipeline.is_enabled():
-        return await unified_detection_pipeline.process(
+        result = await unified_detection_pipeline.process(
             db,
             account_id=account_id,
             source_type="stream_enriched",
@@ -106,6 +106,11 @@ async def detect_api_behavior(
             context_source="LEGACY_ENGINE",
             shadow=(unified_detection_pipeline.mode() == "shadow"),
         )
+        # Active mode hands alerting to the unified pipeline. In shadow mode it
+        # only observes, and the legacy detector below stays authoritative, as
+        # on the ingest paths (docs/detection-engine/README.md).
+        if unified_detection_pipeline.is_active():
+            return result
 
     profile, rate_per_min, now = await update_actor_profile(
         db,
