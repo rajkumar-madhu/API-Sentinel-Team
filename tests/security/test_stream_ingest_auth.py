@@ -149,6 +149,9 @@ async def test_stream_ebpf_redacts_query_values_in_logs_and_broadcasts(
             "events": [
                 {
                     "method": "GET",
+                    # A customer host: host-less console paths such as /admin
+                    # are dropped as API Sentinel's own traffic.
+                    "host": "shop.customer.example",
                     "path": "/admin?q=<script>alert(1)</script>&token=raw-ebpf-token&api_key=raw-ebpf-key",
                     "status": 200,
                     "source_ip": "198.51.100.30",
@@ -173,7 +176,7 @@ async def test_stream_ebpf_redacts_query_values_in_logs_and_broadcasts(
     alert = (
         await db_session.execute(select(Alert).where(Alert.source_ip == "198.51.100.30"))
     ).scalar_one()
-    assert event.url == "/admin?q=****&token=****&api_key=****"
+    assert event.url == "shop.customer.example/admin?q=****&token=****&api_key=****"
     assert alert.endpoint == "/admin?q=****&token=****&api_key=****"
     assert broadcasts[0]["account_id"] == sensor.account_id
     assert broadcasts[0]["message"]["data"]["path"] == "/admin?q=****&token=****&api_key=****"
