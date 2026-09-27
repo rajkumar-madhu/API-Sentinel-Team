@@ -118,13 +118,8 @@ async def handle_incident(
                 "auto_blocked": decision.auto_blocked,
                 "playbooks_executed": 1 if decision.alert_id else 0,
             }
-        return {
-            "alert_id": None,
-            "actor_id": envelope.actor_id,
-            "actor_risk_score": 0.0,
-            "auto_blocked": False,
-            "playbooks_executed": 0,
-        }
+        # Shadow mode: the unified pass above only observed (no writes). Fall
+        # through so the legacy response below stays authoritative.
 
     correlation_result = await correlate_threat(
         db=db,
